@@ -1,4 +1,4 @@
-name: finsmart
+name: zekinance
 description: Application de gestion financière personnelle
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -49,6 +49,9 @@ dependencies:
   shared_preferences: ^2.2.3
   connectivity_plus: ^6.0.3
   path_provider: ^2.1.3
+  firebase_core: ^4.9.0
+  firebase_auth: ^6.5.1
+  cloud_firestore: ^6.4.1
 
 dev_dependencies:
   flutter_test:

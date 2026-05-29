@@ -33,9 +33,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/auth/login';
       }
       
-      // If user is authenticated and trying to access auth screens, redirect to dashboard
-      if (isAuthenticated && isAuthRoute) {
-        return '/dashboard';
+      // If user is authenticated
+      if (isAuthenticated) {
+        final isOnboardingCompleted = authState.monthlyIncome > 0.0;
+        
+        if (!isOnboardingCompleted) {
+          if (state.matchedLocation != '/auth/onboarding') {
+            return '/auth/onboarding';
+          }
+          return null;
+        } else {
+          if (isAuthRoute) {
+            return '/dashboard';
+          }
+        }
       }
       
       return null;
@@ -130,15 +141,15 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class FinSmartApp extends ConsumerWidget {
-  const FinSmartApp({super.key});
+class ZeKinanceApp extends ConsumerWidget {
+  const ZeKinanceApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title: 'FinSmart',
+      title: 'Ze Kinance',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

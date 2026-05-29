@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1095703403898",
+    "project_id": "ze-kinance",
+    "storage_bucket": "ze-kinance.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1095703403898:android:4347e00750a7f5ee0a0ac3",
+        "android_client_info": {
+          "package_name": "com.example.zekinance"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADC_KAzYyWfI93-22UQ1DuH1ArCrLN6BQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

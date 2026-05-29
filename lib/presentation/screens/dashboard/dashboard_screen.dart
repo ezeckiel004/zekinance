@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/extensions/double_ext.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/transaction_provider.dart';
+import '../../providers/budget_provider.dart';
+import '../../../data/models/transaction_model.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -13,42 +17,78 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider);
     final userName = user?.displayName ?? 'Utilisateur';
+    final transactionsAsync = ref.watch(transactionsStreamProvider);
 
     return Scaffold(
       backgroundColor: AppColors.darkBg,
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Row
-              _buildHeader(context, userName, user?.photoUrl),
-              
-              const SizedBox(height: 24),
+        child: transactionsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+          error: (err, stack) => Center(child: Text('Erreur: $err', style: const TextStyle(color: Colors.white))),
+          data: (transactions) {
+            final income = user?.monthlyIncome ?? 250000.0;
+            final currentMonthStr = DateFormat('yyyy-MM').format(DateTime.now());
 
-              // Account Balance Card (Glowing Emerald Gradient)
-              _buildBalanceCard(context, 345000.0, 120000.0),
+            final currentMonthExpenses = transactions.where((tx) {
+              final isSameMonth = DateFormat('yyyy-MM').format(tx.date) == currentMonthStr;
+              return isSameMonth && tx.type == TransactionType.expense;
+            }).fold(0.0, (sum, tx) => sum + tx.amount);
 
-              const SizedBox(height: 28),
+            final currentMonthIncomes = transactions.where((tx) {
+              final isSameMonth = DateFormat('yyyy-MM').format(tx.date) == currentMonthStr;
+              return isSameMonth && tx.type == TransactionType.income;
+            }).fold(0.0, (sum, tx) => sum + tx.amount);
 
-              // Quick Actions Row
-              _buildQuickActions(context),
+            final double availableBalance = income + currentMonthIncomes - currentMonthExpenses;
+            final double monthlySavings = (income * 0.20) + (currentMonthIncomes - currentMonthExpenses).clamp(0, double.infinity);
 
-              const SizedBox(height: 28),
+            final budgetUsagePct = income > 0 ? (currentMonthExpenses / income) : 0.0;
+            final healthScore = (100 - (budgetUsagePct * 100)).clamp(0.0, 100.0).toInt();
 
-              // Financial Health Card & Mini AI Banner (Double Grid / Column)
-              _buildHealthAndCoachSection(context),
+            String healthStatus = 'Excellent';
+            Color healthColor = AppColors.primary;
+            if (healthScore < 50) {
+              healthStatus = 'Critique';
+              healthColor = AppColors.error;
+            } else if (healthScore < 80) {
+              healthStatus = 'Moyen';
+              healthColor = AppColors.secondary;
+            }
 
-              const SizedBox(height: 28),
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header Row
+                  _buildHeader(context, userName, user?.photoUrl),
+                  
+                  const SizedBox(height: 24),
 
-              // Recent Transactions List
-              _buildRecentTransactions(context),
-              
-              const SizedBox(height: 20),
-            ],
-          ),
+                  // Account Balance Card (Glowing Emerald Gradient)
+                  _buildBalanceCard(context, availableBalance, monthlySavings),
+
+                  const SizedBox(height: 28),
+
+                  // Quick Actions Row
+                  _buildQuickActions(context),
+
+                  const SizedBox(height: 28),
+
+                  // Financial Health Card & Mini AI Banner (Double Grid / Column)
+                  _buildHealthAndCoachSection(context, healthScore, healthStatus, healthColor, currentMonthExpenses),
+
+                  const SizedBox(height: 28),
+
+                  // Recent Transactions List
+                  _buildRecentTransactions(context, transactions),
+                  
+                  const SizedBox(height: 20),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -264,7 +304,21 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHealthAndCoachSection(BuildContext context) {
+  Widget _buildHealthAndCoachSection(
+    BuildContext context,
+    int healthScore,
+    String healthStatus,
+    Color healthColor,
+    double expenses,
+  ) {
+    // Generate dynamic tip based on health status
+    String coachTip = '"Votre santé financière est excellente. Continuez sur cette lancée en maintenant vos dépenses sous contrôle !"';
+    if (healthScore < 50) {
+      coachTip = '"Vos dépenses mensuelles sont très élevées. Pensez à limiter vos envies et concentrez-vous sur vos besoins stricts pour redresser la barre !"';
+    } else if (healthScore < 80) {
+      coachTip = '"Votre budget est un peu serré. Une réduction mineure de 10% sur vos loisirs ce mois-ci vous permettrait d\'équilibrer vos comptes."';
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -295,19 +349,20 @@ class DashboardScreen extends ConsumerWidget {
                         height: 75,
                         width: 75,
                         child: CircularProgressIndicator(
-                          value: 0.78,
+                          value: healthScore / 100.0,
                           strokeWidth: 8,
                           backgroundColor: AppColors.darkBorder,
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                          valueColor: AlwaysStoppedAnimation<Color>(healthColor),
                         ),
                       ),
                       Column(
-                        children: const [
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
                           Text(
-                            '78',
-                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            '$healthScore',
+                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                           ),
-                          Text(
+                          const Text(
                             '/100',
                             style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10),
                           ),
@@ -321,12 +376,12 @@ class DashboardScreen extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: healthColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
-                      'Bien',
-                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                    child: Text(
+                      healthStatus,
+                      style: TextStyle(color: healthColor, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ),
                 ),
@@ -359,17 +414,21 @@ class DashboardScreen extends ConsumerWidget {
                   children: const [
                     Icon(Icons.psychology_rounded, color: AppColors.accent, size: 20),
                     SizedBox(width: 8),
-                    Text(
-                      'Conseil de FinCoach',
-                      style: TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Text(
+                        'Conseil de FinCoach',
+                        style: TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Expanded(
                   child: Text(
-                    '"Votre taux d\'épargne est excellent à 34%. Pensez à allouer la moitié de vos envies de la semaine pour atteindre votre objectif de vacances 1 mois plus tôt."',
-                    style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 12, height: 1.4, fontStyle: FontStyle.italic),
+                    coachTip,
+                    style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 11, height: 1.4, fontStyle: FontStyle.italic),
                     overflow: TextOverflow.fade,
                   ),
                 ),
@@ -389,13 +448,8 @@ class DashboardScreen extends ConsumerWidget {
     ).animate().fadeIn(delay: 350.ms).slideY(begin: 0.1, end: 0);
   }
 
-  Widget _buildRecentTransactions(BuildContext context) {
-    // Beautiful mock list
-    final txs = [
-      _MockTx(title: 'Supermarché Siga', amount: -15500, category: 'Alimentation', date: 'Aujourd\'hui', isExpense: true),
-      _MockTx(title: 'Salaire Mensuel', amount: 350000, category: 'Revenus', date: 'Hier', isExpense: false),
-      _MockTx(title: 'Abonnement Netflix', amount: -6500, category: 'Divertissement', date: '25 Mai', isExpense: true),
-    ];
+  Widget _buildRecentTransactions(BuildContext context, List<TransactionModel> txs) {
+    final displayTxs = txs.take(3).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,74 +474,85 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 16),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: txs.length,
-          itemBuilder: (context, index) {
-            final tx = txs[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: AppColors.darkSurface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.darkBorder),
+        if (displayTxs.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            decoration: BoxDecoration(
+              color: AppColors.darkSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.darkBorder),
+            ),
+            child: const Center(
+              child: Text(
+                'Aucune transaction récente',
+                style: TextStyle(color: AppColors.darkTextSecondary),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: (tx.isExpense ? AppColors.error : AppColors.primary).withOpacity(0.12),
-                      shape: BoxShape.circle,
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: displayTxs.length,
+            itemBuilder: (context, index) {
+              final tx = displayTxs[index];
+              final isExpense = tx.type == TransactionType.expense;
+              final formattedDate = DateFormat('dd MMM, HH:mm').format(tx.date);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.darkSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.darkBorder),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: (isExpense ? AppColors.error : AppColors.primary).withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isExpense ? Icons.shopping_bag_outlined : Icons.monetization_on_outlined,
+                        color: isExpense ? AppColors.error : AppColors.primary,
+                        size: 20,
+                      ),
                     ),
-                    child: Icon(
-                      tx.isExpense ? Icons.shopping_bag_outlined : Icons.monetization_on_outlined,
-                      color: tx.isExpense ? AppColors.error : AppColors.primary,
-                      size: 20,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tx.description,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${tx.category} • $formattedDate',
+                            style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          tx.title,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${tx.category} • ${tx.date}',
-                          style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
-                        ),
-                      ],
+                    Text(
+                      (isExpense ? '-' : '+') + tx.amount.toFCFA(),
+                      style: TextStyle(
+                        color: isExpense ? Colors.white : AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                  Text(
-                    (tx.isExpense ? '-' : '+') + tx.amount.abs().toDouble().toFCFA(),
-                    style: TextStyle(
-                      color: tx.isExpense ? Colors.white : AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+                  ],
+                ),
+              );
+            },
+          ),
       ],
     ).animate().fadeIn(delay: 450.ms).slideY(begin: 0.1, end: 0);
   }
-}
-
-class _MockTx {
-  final String title;
-  final double amount;
-  final String category;
-  final String date;
-  final bool isExpense;
-  _MockTx({required this.title, required this.amount, required this.category, required this.date, required this.isExpense});
 }

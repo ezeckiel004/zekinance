@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:finsmart/core/utils/financial_health_calculator.dart';
+import 'package:zekinance/core/utils/financial_health_calculator.dart';
 
 void main() {
   group('FinancialHealthCalculator', () {

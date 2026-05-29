@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/transaction_provider.dart';
+import '../../providers/budget_provider.dart';
+import '../../../data/models/transaction_model.dart';
 
-class AddTransactionScreen extends StatefulWidget {
+class AddTransactionScreen extends ConsumerStatefulWidget {
   const AddTransactionScreen({super.key});
 
   @override
-  State<AddTransactionScreen> createState() => _AddTransactionScreenState();
+  ConsumerState<AddTransactionScreen> createState() => _AddTransactionScreenState();
 }
 
-class _AddTransactionScreenState extends State<AddTransactionScreen> {
+class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _amountController = TextEditingController();
   final _descController = TextEditingController();
   String _selectedCategory = 'Alimentation';
@@ -85,7 +92,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
-  void _saveTransaction() {
+  void _saveTransaction() async {
+    final user = ref.read(authStateProvider);
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Vous devez être connecté pour ajouter une transaction")),
+      );
+      return;
+    }
+
     final amtStr = _amountController.text.trim();
     final desc = _descController.text.trim();
 
@@ -104,11 +119,48 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
-    // Return to flow screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Transaction ajoutée avec succès !'), backgroundColor: AppColors.primary),
+    final String txId = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('transactions')
+        .doc()
+        .id;
+
+    final transaction = TransactionModel(
+      id: txId,
+      type: _isExpense ? TransactionType.expense : TransactionType.income,
+      amount: amt,
+      category: _selectedCategory,
+      description: desc,
+      date: DateTime.now(),
     );
-    context.pop();
+
+    try {
+      await ref.read(transactionOperationsProvider.notifier).add(transaction);
+
+      if (_isExpense) {
+        final activeMonth = DateFormat('yyyy-MM').format(transaction.date);
+        await ref.read(budgetRepositoryProvider).incrementCategorySpent(
+          user.uid,
+          activeMonth,
+          _selectedCategory,
+          amt,
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Transaction ajoutée avec succès !'), backgroundColor: AppColors.primary),
+        );
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
   }
 
   @override

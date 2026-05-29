@@ -61,7 +61,7 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 24),
             // App Name
             Text(
-              'FinSmart',
+              'Ze Kinance',
               style: Theme.of(context).textTheme.displaySmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,

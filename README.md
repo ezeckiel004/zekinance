@@ -184,6 +184,7 @@ Ze Kinance/
 └── firebase.json
 ```
 
+
 ---
 
 ## 3. Configuration Firebase

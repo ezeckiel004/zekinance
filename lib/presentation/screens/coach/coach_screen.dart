@@ -15,7 +15,7 @@ class _CoachScreenState extends State<CoachScreen> {
 
   final List<_ChatMessage> _messages = [
     _ChatMessage(
-      text: "Bonjour ! Je suis FinCoach, votre assistant IA de FinSmart. Comment puis-je vous aider aujourd'hui à optimiser votre santé financière ?",
+      text: "Bonjour ! Je suis FinCoach, votre assistant IA de Ze Kinance. Comment puis-je vous aider aujourd'hui à optimiser votre santé financière ?",
       isUser: false,
       timestamp: '15:20',
     ),

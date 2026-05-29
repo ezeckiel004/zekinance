@@ -1,5 +1,5 @@
 class AppConstants {
-  static const String appName = 'FinSmart';
+  static const String appName = 'Ze Kinance';
   static const String currencySymbol = 'FCFA';
   static const String currencyName = 'Franc CFA';
   

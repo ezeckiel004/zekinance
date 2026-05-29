@@ -1,0 +1,21 @@
+# Tasks - Phase 0 : Configuration et Architecture de Base (Ze Kinance)
+
+- [x] Configuration des dépendances et du linter
+  - [x] Ajouter les packages requis dans `pubspec.yaml` et exécuter `flutter pub get`
+  - [x] Mettre à jour `analysis_options.yaml` avec des règles strictes de qualité
+- [x] Création de la structure de dossiers du projet
+- [x] Système de Design & Thème premium
+  - [x] Créer la palette de couleurs dans `app_colors.dart`
+  - [x] Créer la typographie dans `app_typography.dart`
+  - [x] Créer le thème global Material 3 dans `app_theme.dart`
+- [x] Utilitaires fondamentaux
+  - [x] Créer `app_constants.dart` pour les constantes globales
+  - [x] Créer l'extension de formatage FCFA `double_ext.dart`
+- [x] Navigation & Écrans
+  - [x] Mettre en place `GoRouter` dans `app.dart`
+  - [x] Créer les écrans factices (Placeholders) premiums pour le Splash, l'Authentification et les onglets du tableau de bord
+- [x] Point d'Entrée & Intégration
+  - [x] Nettoyer et réécrire `lib/main.dart` avec Riverpod `ProviderScope`
+- [x] Vérification
+  - [x] Lancer `flutter analyze` pour s'assurer que le code est propre
+  - [x] Lancer `flutter test` pour s'assurer que le projet compile et passe les tests de base
