@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 
 class AuthShell extends StatelessWidget {

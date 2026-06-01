@@ -30,7 +30,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   
   final Set<int> _selectedGoals = {};
   Map<String, double> _categoryLimits = {};
-  bool _limitsInitialized = false;
   bool _isSaving = false;
 
   void _initializeCategoryLimits() {
@@ -43,7 +42,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         'Santé': _monthlyIncome * 0.05,
         'Autres': 0.0,
       };
-      _limitsInitialized = true;
     });
   }
 
