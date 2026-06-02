@@ -6,6 +6,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/translations.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../widgets/language_sheet.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -75,10 +76,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button
-              IconButton(
-                onPressed: () => context.pop(),
-                icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.textPrimary),
+              // Back & Language Buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    onPressed: () => context.pop(),
+                    icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.textPrimary),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.language_rounded, color: AppColors.primary),
+                    onPressed: () => showLanguageSheet(context, ref),
+                  ),
+                ],
               ).animate().fadeIn(duration: 300.ms),
 
               const SizedBox(height: 20),

@@ -7,6 +7,7 @@ import '../../../core/localization/translations.dart';
 import '../../widgets/ze_kinance_logo.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../widgets/language_sheet.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -84,12 +85,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const ZeKinanceLogo(size: 48, hasGlow: false),
-                  TextButton(
-                    onPressed: _handleMockQuickLogin,
-                    child: Text(
-                      isFr ? 'Accès Rapide' : 'Quick Access',
-                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.language_rounded, color: AppColors.primary),
+                        onPressed: () => showLanguageSheet(context, ref),
+                      ),
+                      TextButton(
+                        onPressed: _handleMockQuickLogin,
+                        child: Text(
+                          isFr ? 'Accès Rapide' : 'Quick Access',
+                          style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ).animate().fadeIn(duration: 500.ms),
@@ -153,16 +163,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 12),
 
               // Forgot Password link
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {},
-                  child: Text(
-                    isFr ? 'Mot de passe oublié ?' : 'Forgot password?',
-                    style: TextStyle(color: context.textSecondary),
-                  ),
-                ),
-              ).animate().fadeIn(delay: 450.ms),
+              // Align(
+              //   alignment: Alignment.centerRight,
+              //   child: TextButton(
+              //     onPressed: () {},
+              //     child: Text(
+              //       isFr ? 'Mot de passe oublié ?' : 'Forgot password?',
+              //       style: TextStyle(color: context.textSecondary),
+              //     ),
+              //   ),
+              // ).animate().fadeIn(delay: 450.ms),
 
               const SizedBox(height: 24),
 

@@ -213,7 +213,7 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
 
   Future<String> _queryGemini(String systemPrompt, String userMessage) async {
     final url = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey');
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$_apiKey');
     
     try {
       final historyList = _messages.skip(1).toList();
@@ -541,8 +541,8 @@ $buffer
                   Expanded(
                     child: Text(
                       isProMode
-                          ? (isFr ? 'Propulsé par Gemini 1.5 Flash (Mode Pro)' : 'Powered by Gemini 1.5 Flash (Pro Mode)')
-                          : (isFr ? 'Propulsé par Gemini 1.5 Flash (Mode Démo / Clé requise)' : 'Powered by Gemini 1.5 Flash (Demo Mode / Key required)'),
+                          ? (isFr ? 'Propulsé par Gemini 2.5 Flash (Mode Pro)' : 'Powered by Gemini 2.5 Flash (Pro Mode)')
+                          : (isFr ? 'Propulsé par Gemini 2.5 Flash (Mode Démo / Clé requise)' : 'Powered by Gemini 2.5 Flash (Demo Mode / Key required)'),
                       style: TextStyle(color: context.textSecondary, fontSize: 11),
                     ),
                   ),

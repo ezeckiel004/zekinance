@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../presentation/screens/auth/biometric_lock_wrapper.dart';
 import 'package:go_router/go_router.dart';
 import 'theme/app_theme.dart';
 import '../presentation/providers/auth_provider.dart';
@@ -157,6 +158,11 @@ class ZeKinanceApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        return BiometricLockWrapper(
+          child: child ?? const SizedBox(),
+        );
+      },
     );
   }
 }
