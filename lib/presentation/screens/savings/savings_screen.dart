@@ -4,20 +4,66 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/extensions/double_ext.dart';
+import '../../../core/localization/translations.dart';
 import '../../../data/models/savings_goal_model.dart';
 import '../../providers/savings_provider.dart';
+import '../../providers/settings_provider.dart';
 
 class SavingsScreen extends ConsumerWidget {
   const SavingsScreen({super.key});
 
+  String _getSavingsCategoryDisplayName(String key, bool isFr) {
+    switch (key) {
+      case 'Logement':
+        return isFr ? 'Logement' : 'Housing';
+      case 'Voyage':
+        return isFr ? 'Voyage' : 'Travel';
+      case 'Auto / Moto':
+        return isFr ? 'Auto / Moto' : 'Vehicle';
+      case 'Éducation':
+        return isFr ? 'Éducation' : 'Education';
+      case 'Projet Pro':
+        return isFr ? 'Projet Pro' : 'Business';
+      case 'Urgence':
+        return isFr ? 'Urgence' : 'Emergency';
+      case 'Autre':
+        return isFr ? 'Autre' : 'Other';
+      default:
+        return key;
+    }
+  }
+
+  IconData _getCategoryIcon(String name) {
+    switch (name) {
+      case 'Logement':
+        return Icons.home_rounded;
+      case 'Voyage':
+        return Icons.flight_rounded;
+      case 'Auto / Moto':
+        return Icons.directions_car_rounded;
+      case 'Éducation':
+        return Icons.school_rounded;
+      case 'Projet Pro':
+        return Icons.business_center_rounded;
+      case 'Urgence':
+        return Icons.local_hospital_rounded;
+      default:
+        return Icons.savings_rounded;
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goalsAsync = ref.watch(savingsGoalsStreamProvider);
+    final isFr = ref.watch(languageProvider) == 'fr';
 
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       appBar: AppBar(
-        title: const Text('Mon Épargne'),
+        title: Text(
+          isFr ? 'Mon Épargne' : 'My Savings',
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+        ),
       ),
       body: SafeArea(
         child: goalsAsync.when(
@@ -33,8 +79,8 @@ class SavingsScreen extends ConsumerWidget {
                   const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 48),
                   const SizedBox(height: 16),
                   Text(
-                    'Erreur lors du chargement: $err',
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    '${isFr ? 'Erreur lors du chargement' : 'Error loading savings'}: $err',
+                    style: TextStyle(color: context.textPrimary, fontSize: 14),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -44,247 +90,232 @@ class SavingsScreen extends ConsumerWidget {
           data: (goals) {
             double totalEpargne = goals.fold(0.0, (sum, g) => sum + g.current);
 
-            return SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Overall Savings Card
-                  _buildSavingsOverview(context, totalEpargne),
+            return RefreshIndicator(
+              color: AppColors.primary,
+              backgroundColor: context.surfaceColor,
+              onRefresh: () async {
+                ref.invalidate(savingsGoalsStreamProvider);
+                await Future.delayed(const Duration(milliseconds: 800));
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Overall Savings Card
+                    _buildSavingsOverview(context, ref, totalEpargne, isFr),
 
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 32),
 
-                  // Goals Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Objectifs actifs',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
-                          color: Colors.white,
+                    // Goals Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isFr ? 'Objectifs actifs' : 'Active goals',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
+                            color: context.textPrimary,
+                          ),
                         ),
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(12),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            onPressed: () => _showAddGoalSheet(context, ref, isFr),
+                            icon: const Icon(Icons.add_rounded, color: AppColors.primary),
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.all(8),
+                          ),
                         ),
-                        child: IconButton(
-                          onPressed: () => _showAddGoalSheet(context, ref),
-                          icon: const Icon(Icons.add_rounded, color: AppColors.primary),
-                          constraints: const BoxConstraints(),
-                          padding: const EdgeInsets.all(8),
-                        ),
-                      ),
-                    ],
-                  ).animate().fadeIn(delay: 150.ms),
+                      ],
+                    ).animate().fadeIn(delay: 150.ms),
 
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-                  if (goals.isEmpty)
-                    _buildEmptyState(context, ref)
-                  else
-                    // List of savings goals
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: goals.length,
-                      itemBuilder: (context, index) {
-                        final goal = goals[index];
-                        final progression = goal.target > 0 
-                            ? (goal.current / goal.target * 100).clamp(0, 100) 
-                            : 0.0;
-                        
-                        // Calculate monthly payment needed (deadline in months)
-                        final monthsLeft = (goal.deadline.difference(DateTime.now()).inDays / 30).clamp(1.0, 120.0);
-                        final monthlyNeeded = goal.current >= goal.target 
-                            ? 0.0 
-                            : (goal.target - goal.current) / monthsLeft;
+                    if (goals.isEmpty)
+                      _buildEmptyState(context, ref, isFr)
+                    else
+                      // List of savings goals
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: goals.length,
+                        itemBuilder: (context, index) {
+                          final goal = goals[index];
+                          final progression = goal.target > 0 
+                              ? (goal.current / goal.target * 100).clamp(0.0, 100.0) 
+                              : 0.0;
+                          
+                          final monthsLeft = (goal.deadline.difference(DateTime.now()).inDays / 30).clamp(1.0, 120.0);
+                          final monthlyNeeded = goal.current >= goal.target 
+                              ? 0.0 
+                              : (goal.target - goal.current) / monthsLeft;
 
-                        Color progressColor;
-                        if (progression >= 100) {
-                          progressColor = AppColors.primary;
-                        } else if (progression >= 50) {
-                          progressColor = AppColors.secondary;
-                        } else {
-                          progressColor = AppColors.accent;
-                        }
+                          Color progressColor;
+                          if (progression >= 100) {
+                            progressColor = AppColors.primary;
+                          } else if (progression >= 50) {
+                            progressColor = AppColors.secondary;
+                          } else {
+                            progressColor = AppColors.accent;
+                          }
 
-                        return GestureDetector(
-                          onTap: () => _showGoalDetailsSheet(context, ref, goal),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: AppColors.darkSurface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: AppColors.darkBorder),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: progressColor.withOpacity(0.1),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Icon(
-                                              _getCategoryIcon(goal.category),
-                                              color: progressColor,
-                                              size: 20,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  goal.name,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  goal.category,
-                                                  style: const TextStyle(
-                                                    color: AppColors.darkTextSecondary,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: progressColor.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '${progression.toInt()}%',
-                                        style: TextStyle(
-                                          color: progressColor,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-                                // Progress ring/bar
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: LinearProgressIndicator(
-                                    value: progression / 100,
-                                    minHeight: 6,
-                                    backgroundColor: AppColors.darkBorder,
-                                    valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'ACTUEL',
-                                          style: TextStyle(
-                                            color: AppColors.darkTextSecondary,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          goal.current.toFCFA(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        const Text(
-                                          'CIBLE',
-                                          style: TextStyle(
-                                            color: AppColors.darkTextSecondary,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          goal.target.toFCFA(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                if (goal.current < goal.target) ...[
-                                  const SizedBox(height: 16),
-                                  Divider(color: AppColors.darkBorder),
-                                  const SizedBox(height: 12),
-                                  // Necessary Monthly Deposit
+                          return GestureDetector(
+                            onTap: () => _showGoalDetailsSheet(context, ref, goal, isFr),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: context.surfaceColor,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: context.borderColor),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Icon(Icons.calendar_month_rounded, color: AppColors.secondary, size: 16),
-                                      const SizedBox(width: 8),
-                                      const Expanded(
-                                        child: Text(
-                                          'Mensualité recommandée :',
-                                          style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 12),
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: progressColor.withOpacity(0.1),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                _getCategoryIcon(goal.category),
+                                                color: progressColor,
+                                                size: 20,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 14),
+                                            Expanded(
+                                              child: Text(
+                                                goal.name,
+                                                style: TextStyle(
+                                                  color: context.textPrimary,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      Text(
-                                        '${monthlyNeeded.toFCFA()}/mois',
-                                        style: const TextStyle(
-                                          color: AppColors.secondary,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
+                                      const SizedBox(width: 12),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: progressColor.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          '${progression.toInt()}%',
+                                          style: TextStyle(
+                                            color: progressColor,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: progression / 100,
+                                      minHeight: 6,
+                                      backgroundColor: context.borderColor,
+                                      valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              isFr ? 'Actuel' : 'Current',
+                                              style: TextStyle(color: context.textSecondary, fontSize: 10),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              goal.current.toFCFA(),
+                                              style: TextStyle(
+                                                color: context.textPrimary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              isFr ? 'Mensuel Requis' : 'Monthly Required',
+                                              style: TextStyle(color: context.textSecondary, fontSize: 10),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              monthlyNeeded.toFCFA(),
+                                              style: TextStyle(
+                                                color: monthlyNeeded > 0 ? AppColors.accent : AppColors.primary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              isFr ? 'Cible' : 'Target',
+                                              style: TextStyle(color: context.textSecondary, fontSize: 10),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              goal.target.toFCFA(),
+                                              style: TextStyle(
+                                                color: context.textPrimary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                        ).animate().fadeIn(duration: 400.ms, delay: (index * 80).ms).slideY(begin: 0.05, end: 0);
-                      },
-                    ),
-                ],
+                          );
+                        },
+                      ).animate().fadeIn(delay: 200.ms),
+                  ],
+                ),
               ),
             );
           },
@@ -293,130 +324,121 @@ class SavingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSavingsOverview(BuildContext context, double total) {
+  Widget _buildSavingsOverview(BuildContext context, WidgetRef ref, double total, bool isFr) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
+        color: context.surfaceColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(color: context.borderColor),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.savings_outlined, color: AppColors.primary, size: 28),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                context.tr(ref, 'savings_total'),
+                style: TextStyle(
+                  color: context.textSecondary,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+              const Icon(Icons.savings_rounded, color: AppColors.secondary),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Épargne totale accumulée',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.darkTextSecondary),
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 12),
           Text(
             total.toFCFA(),
-            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.textPrimary,
               fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
+              fontSize: 28,
             ),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Félicitations ! Vous êtes sur la bonne voie pour sécuriser votre avenir financier.',
-            style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 12, height: 1.4),
-            textAlign: TextAlign.center,
+          const SizedBox(height: 8),
+          Text(
+            isFr 
+              ? 'Vos réserves d\'épargne accumulées' 
+              : 'Your accumulated savings reserves',
+            style: TextStyle(color: context.textSecondary, fontSize: 11),
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 400.ms);
+    ).animate().fadeIn(duration: 400.ms).scale(duration: 400.ms);
   }
 
-  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref, bool isFr) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
+        color: context.surfaceColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(color: context.borderColor),
       ),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: AppColors.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.savings_outlined,
               color: AppColors.primary,
-              size: 48,
+              size: 40,
             ),
           ),
-          const SizedBox(height: 24),
-          const Text(
-            "Aucun projet d'épargne",
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          const SizedBox(height: 20),
+          Text(
+            isFr ? 'Aucun objectif actif' : 'No active goals',
+            style: TextStyle(
+              color: context.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            "Créez votre premier objectif pour commencer à épargner de façon structurée.",
-            style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13, height: 1.4),
+          Text(
+            context.tr(ref, 'savings_no_goals'),
+            style: TextStyle(
+              color: context.textSecondary,
+              fontSize: 12,
+              height: 1.4,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => _showAddGoalSheet(context, ref),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            child: const Text('Créer mon premier objectif', style: TextStyle(fontWeight: FontWeight.bold)),
+          ElevatedButton.icon(
+            onPressed: () => _showAddGoalSheet(context, ref, isFr),
+            icon: const Icon(Icons.add_rounded, color: Colors.black),
+            label: Text(context.tr(ref, 'savings_create_goal')),
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 300.ms);
+    ).animate().fadeIn(delay: 200.ms);
   }
 
-  IconData _getCategoryIcon(String category) {
-    switch (category) {
-      case 'Vacances':
-        return Icons.flight_takeoff_rounded;
-      case 'High-Tech':
-        return Icons.laptop_mac_rounded;
-      case 'Sécurité':
-        return Icons.security_rounded;
-      case 'Logement':
-        return Icons.home_rounded;
-      case 'Véhicule':
-        return Icons.directions_car_rounded;
-      default:
-        return Icons.savings_rounded;
-    }
-  }
-
-  void _showAddGoalSheet(BuildContext context, WidgetRef ref) {
+  void _showAddGoalSheet(BuildContext context, WidgetRef ref, bool isFr) {
     final nameController = TextEditingController();
     final targetController = TextEditingController();
-    final currentController = TextEditingController();
+    final currentController = TextEditingController(text: '0');
+    final formKey = GlobalKey<FormState>();
     
-    String selectedCategory = 'Vacances';
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 90));
-    final categories = ['Vacances', 'High-Tech', 'Sécurité', 'Logement', 'Véhicule', 'Autre'];
+    String selectedCategory = 'Voyage';
+    DateTime selectedDeadline = DateTime.now().add(const Duration(days: 365));
+
+    final categories = ['Voyage', 'Logement', 'Auto / Moto', 'Éducation', 'Projet Pro', 'Urgence', 'Autre'];
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.darkSurface,
+      backgroundColor: context.surfaceColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -430,230 +452,229 @@ class SavingsScreen extends ConsumerWidget {
                 top: 24,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 24,
               ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Nouvel objectif d\'épargne',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close_rounded, color: AppColors.darkTextSecondary),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Name input
-                    const Text('NOM DE L\'OBJECTIF', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: nameController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Ex: Voyage au Kenya',
-                        hintStyle: TextStyle(color: AppColors.darkTextSecondary.withOpacity(0.5)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Category input
-                    const Text('CATEGORIE', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: categories.map((cat) {
-                        final isSelected = selectedCategory == cat;
-                        return ChoiceChip(
-                          label: Text(cat),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            if (selected) {
-                              setState(() {
-                                selectedCategory = cat;
-                              });
-                            }
-                          },
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.black : Colors.white,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          selectedColor: AppColors.primary,
-                          backgroundColor: AppColors.darkSurfaceLight,
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Amounts input
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('MONTANT CIBLE', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: targetController,
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                decoration: const InputDecoration(
-                                  hintText: 'Ex: 1500000',
-                                  suffixText: 'FCFA',
-                                  suffixStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('APPORT INITIAL', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: currentController,
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                decoration: const InputDecoration(
-                                  hintText: 'Ex: 200000',
-                                  suffixText: 'FCFA',
-                                  suffixStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Deadline Selector
-                    const Text('DATE LIMITE CIBLE', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () async {
-                        final pickerDate = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 3650)),
-                          builder: (context, child) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme: const ColorScheme.dark(
-                                  primary: AppColors.primary,
-                                  onPrimary: Colors.black,
-                                  surface: AppColors.darkSurface,
-                                  onSurface: Colors.white,
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
-                        );
-                        if (pickerDate != null) {
-                          setState(() {
-                            selectedDate = pickerDate;
-                          });
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: AppColors.darkSurfaceLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.darkBorder),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              DateFormat('dd MMMM yyyy', 'fr_FR').format(selectedDate),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            context.tr(ref, 'savings_new_goal_title'),
+                            style: TextStyle(
+                              color: context.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
-                            const Icon(Icons.calendar_month_rounded, color: AppColors.primary),
-                          ],
-                        ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: Icon(Icons.close_rounded, color: context.textSecondary),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 28),
+                      const SizedBox(height: 16),
+                      
+                      Text(
+                        isFr ? 'NOM DE L\'OBJECTIF' : 'GOAL NAME', 
+                        style: TextStyle(color: context.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: nameController,
+                        textCapitalization: TextCapitalization.sentences,
+                        style: TextStyle(color: context.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: isFr ? 'Ex: Voyage au Kenya' : 'e.g. Trip to Kenya',
+                          hintStyle: TextStyle(color: context.textSecondary.withOpacity(0.5)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        validator: (val) => val == null || val.trim().isEmpty 
+                            ? (isFr ? 'Veuillez entrer un nom' : 'Please enter a name') 
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
 
-                    // Submit button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final name = nameController.text.trim();
-                          final targetStr = targetController.text.trim();
-                          final currentStr = currentController.text.trim();
-
-                          if (name.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Veuillez entrer un nom d\'objectif')),
-                            );
-                            return;
-                          }
-
-                          final double? target = double.tryParse(targetStr);
-                          if (target == null || target <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Veuillez entrer un montant cible valide')),
-                            );
-                            return;
-                          }
-
-                          final double current = double.tryParse(currentStr) ?? 0.0;
-
-                          await ref.read(savingsOperationsProvider.notifier).addGoal(
-                            name: name,
-                            target: target,
-                            current: current,
-                            deadline: selectedDate,
-                            category: selectedCategory,
+                      Text(
+                        isFr ? 'CATÉGORIE' : 'CATEGORY', 
+                        style: TextStyle(color: context.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: categories.map((cat) {
+                          final isSelected = selectedCategory == cat;
+                          return ChoiceChip(
+                            label: Text(_getSavingsCategoryDisplayName(cat, isFr)),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() {
+                                  selectedCategory = cat;
+                                });
+                              }
+                            },
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.black : context.textPrimary,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            selectedColor: AppColors.primary,
+                            backgroundColor: context.surfaceColorLight,
                           );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
 
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Objectif "$name" créé avec succès !'),
-                                backgroundColor: AppColors.primary,
-                              ),
-                            );
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isFr ? 'MONTANT CIBLE' : 'TARGET AMOUNT', 
+                                  style: TextStyle(color: context.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: targetController,
+                                  keyboardType: TextInputType.number,
+                                  style: TextStyle(color: context.textPrimary),
+                                  decoration: const InputDecoration(
+                                    hintText: 'FCFA',
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  ),
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) {
+                                      return isFr ? 'Obligatoire' : 'Required';
+                                    }
+                                    final d = double.tryParse(val);
+                                    if (d == null || d <= 0) return isFr ? 'Invalide' : 'Invalid';
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isFr ? 'APPORT INITIAL' : 'INITIAL AMOUNT', 
+                                  style: TextStyle(color: context.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: currentController,
+                                  keyboardType: TextInputType.number,
+                                  style: TextStyle(color: context.textPrimary),
+                                  decoration: const InputDecoration(
+                                    hintText: 'FCFA',
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  ),
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) return null;
+                                    final d = double.tryParse(val);
+                                    if (d == null || d < 0) return isFr ? 'Invalide' : 'Invalid';
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      Text(
+                        isFr ? 'ÉCHÉANCE CIBLE' : 'TARGET DEADLINE', 
+                        style: TextStyle(color: context.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDeadline,
+                            firstDate: DateTime.now().add(const Duration(days: 1)),
+                            lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              selectedDeadline = picked;
+                            });
                           }
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
-                        child: const Text(
-                          'Créer l\'objectif',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: context.surfaceColorLight,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: context.borderColor),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                DateFormat('dd MMMM yyyy').format(selectedDeadline),
+                                style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+                              ),
+                              const Icon(Icons.calendar_today_rounded, color: AppColors.primary, size: 18),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 32),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (!formKey.currentState!.validate()) return;
+                            
+                            final name = nameController.text.trim();
+                            final target = double.parse(targetController.text.trim());
+                            final current = double.parse(currentController.text.trim());
+
+                            try {
+                              await ref.read(savingsOperationsProvider.notifier).addGoal(
+                                name: name,
+                                target: target,
+                                current: current,
+                                category: selectedCategory,
+                                deadline: selectedDeadline,
+                              );
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(context.tr(ref, 'savings_goal_added')),
+                                    backgroundColor: AppColors.primary,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('${context.tr(ref, 'error')}: $e'),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          child: Text(isFr ? 'Créer l\'objectif' : 'Create Goal'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -663,292 +684,216 @@ class SavingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showEditGoalSheet(BuildContext context, WidgetRef ref, SavingsGoalModel goal) {
-    final nameController = TextEditingController(text: goal.name);
-    final targetController = TextEditingController(text: goal.target.toInt().toString());
-    final currentController = TextEditingController(text: goal.current.toInt().toString());
+  void _showGoalDetailsSheet(BuildContext context, WidgetRef ref, SavingsGoalModel goal, bool isFr) {
+    final progression = goal.target > 0 ? (goal.current / goal.target * 100).clamp(0.0, 100.0) : 0.0;
     
-    String selectedCategory = goal.category;
-    DateTime selectedDate = goal.deadline;
-    final categories = ['Vacances', 'High-Tech', 'Sécurité', 'Logement', 'Véhicule', 'Autre'];
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.darkSurface,
+      backgroundColor: context.surfaceColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Modifier l\'objectif',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close_rounded, color: AppColors.darkTextSecondary),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Name input
-                    const Text('NOM DE L\'OBJECTIF', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: nameController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Ex: Voyage au Kenya',
-                        hintStyle: TextStyle(color: AppColors.darkTextSecondary.withOpacity(0.5)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Category input
-                    const Text('CATEGORIE', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: categories.map((cat) {
-                        final isSelected = selectedCategory == cat;
-                        return ChoiceChip(
-                          label: Text(cat),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            if (selected) {
-                              setState(() {
-                                selectedCategory = cat;
-                              });
-                            }
-                          },
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.black : Colors.white,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          selectedColor: AppColors.primary,
-                          backgroundColor: AppColors.darkSurfaceLight,
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Amounts input
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('MONTANT CIBLE', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: targetController,
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                decoration: const InputDecoration(
-                                  hintText: 'Ex: 1500000',
-                                  suffixText: 'FCFA',
-                                  suffixStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('APPORT ÉPARGNÉ', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: currentController,
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                decoration: const InputDecoration(
-                                  hintText: 'Ex: 200000',
-                                  suffixText: 'FCFA',
-                                  suffixStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Deadline Selector
-                    const Text('DATE LIMITE CIBLE', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () async {
-                        final pickerDate = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                          lastDate: DateTime.now().add(const Duration(days: 3650)),
-                          builder: (context, child) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme: const ColorScheme.dark(
-                                  primary: AppColors.primary,
-                                  onPrimary: Colors.black,
-                                  surface: AppColors.darkSurface,
-                                  onSurface: Colors.white,
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
-                        );
-                        if (pickerDate != null) {
-                          setState(() {
-                            selectedDate = pickerDate;
-                          });
-                        }
-                      },
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: AppColors.darkSurfaceLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.darkBorder),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              DateFormat('dd MMMM yyyy', 'fr_FR').format(selectedDate),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                            const Icon(Icons.calendar_month_rounded, color: AppColors.primary),
-                          ],
-                        ),
+                    ),
+                    child: Text(
+                      _getSavingsCategoryDisplayName(goal.category, isFr).toUpperCase(),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 28),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close_rounded, color: context.textSecondary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                goal.name,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${isFr ? 'Échéance' : 'Deadline'}: ${DateFormat('dd MMMM yyyy').format(goal.deadline)}',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 24),
 
-                    // Submit button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final name = nameController.text.trim();
-                          final targetStr = targetController.text.trim();
-                          final currentStr = currentController.text.trim();
+              // Progress Bar Visual
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isFr ? 'Progression globale' : 'Overall Progress', 
+                    style: TextStyle(color: context.textSecondary, fontSize: 13)
+                  ),
+                  Text(
+                    '${progression.toStringAsFixed(1)}%',
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progression / 100,
+                  minHeight: 8,
+                  backgroundColor: context.borderColor,
+                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              ),
+              const SizedBox(height: 24),
 
-                          if (name.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Veuillez entrer un nom d\'objectif')),
-                            );
-                            return;
-                          }
-
-                          final double? target = double.tryParse(targetStr);
-                          if (target == null || target <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Veuillez entrer un montant cible valide')),
-                            );
-                            return;
-                          }
-
-                          final double current = double.tryParse(currentStr) ?? 0.0;
-
-                          await ref.read(savingsOperationsProvider.notifier).updateGoal(
-                            id: goal.id,
-                            name: name,
-                            target: target,
-                            current: current,
-                            deadline: selectedDate,
-                            category: selectedCategory,
-                            createdAt: goal.createdAt,
-                          );
-
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Objectif "$name" modifié avec succès !'),
-                                backgroundColor: AppColors.primary,
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              // Numeric indicators
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: context.surfaceColorLight,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: context.borderColor),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(isFr ? 'ÉPARGNÉ' : 'SAVED', style: TextStyle(color: context.textSecondary, fontSize: 10)),
+                        const SizedBox(height: 4),
+                        Text(
+                          goal.current.toFCFA(),
+                          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                         ),
-                        child: const Text(
-                          'Enregistrer les modifications',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(isFr ? 'CIBLE' : 'TARGET', style: TextStyle(color: context.textSecondary, fontSize: 10)),
+                        const SizedBox(height: 4),
+                        Text(
+                          goal.target.toFCFA(),
+                          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
               ),
-            );
-          },
+              const SizedBox(height: 28),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showAdjustFundsSheet(context, ref, goal, false, isFr);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(
+                        context.tr(ref, 'savings_withdraw'),
+                        style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showAdjustFundsSheet(context, ref, goal, true, isFr);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(
+                        context.tr(ref, 'savings_add'),
+                        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    try {
+                      await ref.read(savingsOperationsProvider.notifier).deleteGoal(goal.id);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isFr 
+                                ? 'Objectif d\'épargne supprimé' 
+                                : 'Savings goal deleted'
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('${context.tr(ref, 'error')}: $e')),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 18),
+                  label: Text(
+                    isFr ? 'Supprimer l\'objectif' : 'Delete Goal',
+                    style: const TextStyle(color: AppColors.error),
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  void _showGoalDetailsSheet(BuildContext context, WidgetRef ref, SavingsGoalModel goal) {
-    final depositController = TextEditingController();
-    final progression = goal.target > 0 
-        ? (goal.current / goal.target * 100).clamp(0, 100) 
-        : 0.0;
-    
-    // Calculate monthly payment needed (deadline in months)
-    final monthsLeft = (goal.deadline.difference(DateTime.now()).inDays / 30).clamp(1.0, 120.0);
-    final monthlyNeeded = goal.current >= goal.target 
-        ? 0.0 
-        : (goal.target - goal.current) / monthsLeft;
-
-    Color progressColor;
-    if (progression >= 100) {
-      progressColor = AppColors.primary;
-    } else if (progression >= 50) {
-      progressColor = AppColors.secondary;
-    } else {
-      progressColor = AppColors.accent;
-    }
+  void _showAdjustFundsSheet(BuildContext context, WidgetRef ref, SavingsGoalModel goal, bool isDeposit, bool isFr) {
+    final amountController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.darkSurface,
+      backgroundColor: context.surfaceColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -960,7 +905,8 @@ class SavingsScreen extends ConsumerWidget {
             top: 24,
             bottom: MediaQuery.of(context).viewInsets.bottom + 24,
           ),
-          child: SingleChildScrollView(
+          child: Form(
+            key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -968,263 +914,96 @@ class SavingsScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            goal.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            goal.category,
-                            style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 13),
-                          ),
-                        ],
+                    Text(
+                      isDeposit 
+                          ? context.tr(ref, 'savings_add_fund_title') 
+                          : context.tr(ref, 'savings_withdraw_fund_title'),
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _showEditGoalSheet(context, ref, goal);
-                          },
-                          icon: const Icon(Icons.edit_rounded, color: AppColors.primary),
-                          tooltip: 'Modifier l\'objectif',
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close_rounded, color: AppColors.darkTextSecondary),
-                        ),
-                      ],
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: Icon(Icons.close_rounded, color: context.textSecondary),
                     ),
                   ],
-                ),
-                const SizedBox(height: 24),
-
-                // Progression Overview
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('ÉPARGNÉ', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text(
-                          goal.current.toFCFA(),
-                          style: TextStyle(color: progressColor, fontWeight: FontWeight.bold, fontSize: 20),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('OBJECTIF CIBLE', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text(
-                          goal.target.toFCFA(),
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                
-                // Progress Bar
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progression / 100,
-                    minHeight: 8,
-                    backgroundColor: AppColors.darkBorder,
-                    valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                  ),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${progression.toInt()}% complété',
-                      style: TextStyle(color: progressColor, fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
-                    Text(
-                      'Échéance: ${DateFormat('dd MMM yyyy', 'fr_FR').format(goal.deadline)}',
-                      style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 12),
-                    ),
-                  ],
+                Text(
+                  isDeposit 
+                      ? (isFr ? 'Déposez de l\'argent vers cet objectif.' : 'Deposit money to this goal.')
+                      : (isFr ? 'Retirez de l\'argent de cet objectif.' : 'Withdraw money from this goal.'),
+                  style: TextStyle(color: context.textSecondary, fontSize: 13),
                 ),
-                
                 const SizedBox(height: 24),
-                Divider(color: AppColors.darkBorder),
-                const SizedBox(height: 16),
-
-                // Info Section
-                if (goal.current < goal.target) ...[
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.darkSurfaceLight,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.darkBorder),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.calendar_month_rounded, color: AppColors.secondary, size: 24),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Mensualité Recommandée',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Basé sur ${monthsLeft.toStringAsFixed(1)} mois restants',
-                                style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          '${monthlyNeeded.toFCFA()}/m',
-                          style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold, fontSize: 15),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ] else ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.stars_rounded, color: AppColors.primary, size: 28),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Objectif Atteint ! Félicitations pour ce superbe succès financier ! 🎉',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, height: 1.4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-
-                // Deposit Section
-                const Text('FAIRE UN VERSEMENT', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
+                Text(
+                  context.tr(ref, 'savings_amount_label').toUpperCase(), 
+                  style: TextStyle(color: context.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)
+                ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: depositController,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        decoration: const InputDecoration(
-                          hintText: 'Montant à ajouter',
-                          prefixText: '+  ',
-                          prefixStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                          suffixText: 'FCFA',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () async {
-                        final amountStr = depositController.text.trim();
-                        final double? amount = double.tryParse(amountStr);
-
-                        if (amount == null || amount <= 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Veuillez entrer un montant valide supérieur à 0')),
-                          );
-                          return;
-                        }
-
-                        await ref.read(savingsOperationsProvider.notifier).makeDeposit(goal.id, amount);
-
+                TextFormField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                  style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+                  decoration: const InputDecoration(
+                    prefixText: 'FCFA  ',
+                    prefixStyle: TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.bold),
+                    hintText: 'Ex: 15000',
+                  ),
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) {
+                      return isFr ? 'Veuillez entrer un montant' : 'Please enter an amount';
+                    }
+                    final d = double.tryParse(val);
+                    if (d == null || d <= 0) {
+                      return isFr ? 'Montant invalide' : 'Invalid amount';
+                    }
+                    if (!isDeposit && d > goal.current) {
+                      return isFr 
+                          ? 'Solde d\'épargne insuffisant' 
+                          : 'Insufficient savings balance';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      
+                      final amount = double.parse(amountController.text.trim());
+                      
+                      try {
+                        await ref.read(savingsOperationsProvider.notifier).makeDeposit(
+                          goal,
+                          isDeposit ? amount : -amount,
+                        );
                         if (context.mounted) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Versement de ${amount.toFCFA()} enregistré avec succès !'),
+                              content: Text(context.tr(ref, 'savings_fund_updated')),
                               backgroundColor: AppColors.primary,
                             ),
                           );
                         }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('Déposer', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 32),
-                
-                // Delete Button
-                Center(
-                  child: TextButton.icon(
-                    onPressed: () async {
-                      // Confirm action dialog
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: AppColors.darkSurface,
-                          title: const Text('Supprimer l\'objectif ?', style: TextStyle(color: Colors.white)),
-                          content: Text('Êtes-vous sûr de vouloir supprimer l\'objectif "${goal.name}" ? Cette action est irréversible.', style: const TextStyle(color: AppColors.darkTextSecondary)),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Annuler', style: TextStyle(color: AppColors.darkTextSecondary)),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Supprimer', style: TextStyle(color: AppColors.error)),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm == true) {
-                        await ref.read(savingsOperationsProvider.notifier).deleteGoal(goal.id);
+                      } catch (e) {
                         if (context.mounted) {
-                          Navigator.pop(context); // Close details sheet
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Objectif "${goal.name}" supprimé'),
+                              content: Text('${context.tr(ref, 'error')}: $e'),
                               backgroundColor: AppColors.error,
                             ),
                           );
                         }
                       }
                     },
-                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
-                    label: const Text('Supprimer cet objectif', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+                    child: Text(isFr ? 'Valider' : 'Submit'),
                   ),
                 ),
               ],

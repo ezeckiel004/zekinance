@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/extensions/double_ext.dart';
+import '../../../core/localization/translations.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/budget_provider.dart';
+import '../../providers/settings_provider.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -27,6 +29,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     'Rembourser mes dettes',
     'Parler au Coach IA'
   ];
+
+  final List<String> _goalsEn = [
+    'Save for a project',
+    'Track my daily expenses',
+    'Create a balanced budget',
+    'Manage my Tontines',
+    'Repay my debts',
+    'Talk to the AI Coach'
+  ];
   
   final Set<int> _selectedGoals = {};
   Map<String, double> _categoryLimits = {};
@@ -43,6 +54,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         'Autres': 0.0,
       };
     });
+  }
+
+  String _getCategoryDisplayName(String key, bool isFr) {
+    switch (key) {
+      case 'Alimentation':
+        return isFr ? 'Alimentation' : 'Food & Groceries';
+      case 'Loyer & Factures':
+        return isFr ? 'Loyer & Factures' : 'Rent & Bills';
+      case 'Divertissement':
+        return isFr ? 'Divertissement' : 'Entertainment';
+      case 'Transport':
+        return isFr ? 'Transport' : 'Transportation';
+      case 'Santé':
+        return isFr ? 'Santé' : 'Health';
+      case 'Autres':
+        return isFr ? 'Autres' : 'Others';
+      default:
+        return key;
+    }
   }
 
   IconData _getCategoryIcon(String name) {
@@ -80,8 +110,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   void _nextStep() async {
+    final isFr = ref.read(languageProvider) == 'fr';
     if (_currentStep < 2) {
-      if (_currentStep == 1) {
+      if (_currentStep == 0) {
         _initializeCategoryLimits();
       }
       setState(() {
@@ -93,8 +124,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       final totalAlloue = _categoryLimits.values.fold(0.0, (sum, val) => sum + val);
       if (totalAlloue > _monthlyIncome) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Le total alloué ne doit pas dépasser votre revenu mensuel"),
+          SnackBar(
+            content: Text(
+              isFr 
+                ? 'Le total alloué ne doit pas dépasser votre revenu mensuel' 
+                : 'Total allocated must not exceed your monthly income'
+            ),
             backgroundColor: AppColors.error,
           ),
         );
@@ -119,8 +154,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final errLabel = isFr ? 'Erreur lors de la configuration' : 'Error during configuration';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur lors de la configuration : $e')),
+            SnackBar(content: Text('$errLabel: $e')),
           );
         }
       } finally {
@@ -141,8 +177,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isFr = ref.watch(languageProvider) == 'fr';
+    
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -156,7 +194,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       height: 4,
                       margin: EdgeInsets.only(right: index == 2 ? 0 : 8),
                       decoration: BoxDecoration(
-                        color: index <= _currentStep ? AppColors.primary : AppColors.darkBorder,
+                        color: index <= _currentStep ? AppColors.primary : context.borderColor,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -169,7 +207,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  child: _buildStepContent(),
+                  child: _buildStepContent(isFr),
                 ),
               ),
 
@@ -179,9 +217,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   if (_currentStep > 0)
                     TextButton(
                       onPressed: _prevStep,
-                      child: const Text(
-                        'Retour',
-                        style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 16),
+                      child: Text(
+                        isFr ? 'Retour' : 'Back',
+                        style: TextStyle(color: context.textSecondary, fontSize: 16),
                       ),
                     )
                   else
@@ -197,7 +235,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         : Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(_currentStep == 2 ? 'Commencer' : 'Continuer'),
+                              Text(
+                                _currentStep == 2 
+                                  ? (isFr ? 'Commencer' : 'Start') 
+                                  : (isFr ? 'Continuer' : 'Continue')
+                              ),
                               const SizedBox(width: 8),
                               const Icon(Icons.arrow_forward_rounded, size: 18),
                             ],
@@ -212,7 +254,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  Widget _buildStepContent() {
+  Widget _buildStepContent(bool isFr) {
     switch (_currentStep) {
       case 0:
         return Column(
@@ -220,17 +262,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Quels sont vos objectifs ?',
+              isFr ? 'Quels sont vos objectifs ?' : 'What are your goals?',
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,
+                color: context.textPrimary,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Sélectionnez tout ce qui vous intéresse. Cela nous aidera à personnaliser votre expérience.',
+              isFr 
+                ? 'Sélectionnez tout ce qui vous intéresse. Cela nous aidera à personnaliser votre expérience.' 
+                : 'Select everything that interests you. This will help us customize your experience.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.darkTextSecondary,
+                color: context.textSecondary,
               ),
             ),
             const SizedBox(height: 24),
@@ -253,9 +298,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.darkSurface,
+                        color: isSelected ? AppColors.primary.withOpacity(0.1) : context.surfaceColor,
                         border: Border.all(
-                          color: isSelected ? AppColors.primary : AppColors.darkBorder,
+                          color: isSelected ? AppColors.primary : context.borderColor,
                           width: 1.5,
                         ),
                         borderRadius: BorderRadius.circular(16),
@@ -264,16 +309,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            _goals[index],
+                            isFr ? _goals[index] : _goalsEn[index],
                             style: TextStyle(
-                              color: isSelected ? AppColors.primary : AppColors.darkTextPrimary,
+                              color: isSelected ? AppColors.primary : context.textPrimary,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                               fontSize: 16,
                             ),
                           ),
                           Icon(
                             isSelected ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
-                            color: isSelected ? AppColors.primary : AppColors.darkTextSecondary,
+                            color: isSelected ? AppColors.primary : context.textSecondary,
                           ),
                         ],
                       ),
@@ -290,17 +335,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Quel est votre revenu ?',
+              isFr ? 'Quel est votre revenu ?' : 'What is your income?',
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,
+                color: context.textPrimary,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Saisissez votre revenu mensuel moyen. Nous l’utiliserons pour concevoir votre premier budget.',
+              isFr 
+                ? 'Saisissez votre revenu mensuel moyen. Nous l’utiliserons pour concevoir votre premier budget.' 
+                : 'Enter your average monthly income. We will use it to design your first budget.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.darkTextSecondary,
+                color: context.textSecondary,
               ),
             ),
             const SizedBox(height: 60),
@@ -316,9 +364,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'par mois',
+                    isFr ? 'par mois' : 'per month',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.darkTextSecondary,
+                      color: context.textSecondary,
                     ),
                   ),
                 ],
@@ -328,7 +376,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 activeTrackColor: AppColors.primary,
-                inactiveTrackColor: AppColors.darkBorder,
+                inactiveTrackColor: context.borderColor,
                 thumbColor: AppColors.primary,
                 overlayColor: AppColors.primary.withOpacity(0.2),
                 trackHeight: 6,
@@ -348,8 +396,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: const [
-                Text('50 000 FCFA', style: TextStyle(color: AppColors.darkTextSecondary)),
-                Text('2 000 000 FCFA+', style: TextStyle(color: AppColors.darkTextSecondary)),
+                Text('50 000 FCFA', style: TextStyle(color: AppColors.secondary)),
+                Text('2 000 000 FCFA+', style: TextStyle(color: AppColors.primary)),
               ],
             ),
             const SizedBox(height: 60),
@@ -367,17 +415,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Configurez vos limites',
+                isFr ? 'Configurez vos limites' : 'Configure your limits',
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                   letterSpacing: -0.5,
+                  color: context.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Ajustez la part allouée à chaque catégorie. Le reste sera automatiquement placé en épargne.',
+                isFr 
+                  ? 'Ajustez la part allouée à chaque catégorie. Le reste sera automatiquement placé en épargne.' 
+                  : 'Adjust the share allocated to each category. The rest will be automatically saved.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.darkTextSecondary,
+                  color: context.textSecondary,
                 ),
               ),
               const SizedBox(height: 24),
@@ -385,10 +436,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.darkSurface,
+                  color: context.surfaceColor,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: exceeds ? AppColors.error : AppColors.darkBorder,
+                    color: exceeds ? AppColors.error : context.borderColor,
                   ),
                 ),
                 child: Column(
@@ -396,15 +447,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Revenu mensuel', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13)),
-                        Text(_monthlyIncome.toFCFA(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text(
+                          isFr ? 'Revenu mensuel' : 'Monthly Income', 
+                          style: TextStyle(color: context.textSecondary, fontSize: 13)
+                        ),
+                        Text(
+                          _monthlyIncome.toFCFA(), 
+                          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total alloué', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13)),
+                        Text(
+                          isFr ? 'Total alloué' : 'Total Allocated', 
+                          style: TextStyle(color: context.textSecondary, fontSize: 13)
+                        ),
                         Text(
                           totalAlloue.toFCFA(),
                           style: TextStyle(
@@ -415,11 +475,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ),
                       ],
                     ),
-                    const Divider(height: 24, color: AppColors.darkBorder),
+                    Divider(height: 24, color: context.borderColor),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Épargne mensuelle', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13)),
+                        Text(
+                          isFr ? 'Épargne mensuelle' : 'Monthly Savings', 
+                          style: TextStyle(color: context.textSecondary, fontSize: 13)
+                        ),
                         Text(
                           epargne.toFCFA(),
                           style: const TextStyle(
@@ -433,13 +496,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     if (exceeds) ...[
                       const SizedBox(height: 12),
                       Row(
-                        children: const [
-                          Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 16),
-                          SizedBox(width: 8),
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 16),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Attention : Le total alloué dépasse votre revenu mensuel !',
-                              style: TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.bold),
+                              isFr 
+                                ? 'Attention : Le total alloué dépasse votre revenu mensuel !' 
+                                : 'Warning: Total allocated exceeds your monthly income!',
+                              style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
@@ -461,9 +526,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   margin: const EdgeInsets.only(bottom: 16),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.darkSurface,
+                    color: context.surfaceColor,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.darkBorder),
+                    border: Border.all(color: context.borderColor),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -483,8 +548,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                cat,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                _getCategoryDisplayName(cat, isFr),
+                                style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                               ),
                             ],
                           ),
@@ -496,8 +561,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 style: TextStyle(color: catColor, fontWeight: FontWeight.bold, fontSize: 15),
                               ),
                               Text(
-                                '$pct% du revenu',
-                                style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
+                                isFr ? '$pct% du revenu' : '$pct% of income',
+                                style: TextStyle(color: context.textSecondary, fontSize: 11),
                               ),
                             ],
                           ),
@@ -507,7 +572,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       SliderTheme(
                         data: SliderTheme.of(context).copyWith(
                           activeTrackColor: catColor,
-                          inactiveTrackColor: AppColors.darkBorder,
+                          inactiveTrackColor: context.borderColor,
                           thumbColor: catColor,
                           overlayColor: catColor.withOpacity(0.2),
                           trackHeight: 4,

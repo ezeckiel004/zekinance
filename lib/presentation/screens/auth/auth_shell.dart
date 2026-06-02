@@ -8,9 +8,8 @@ class AuthShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // If we're using GoRouter, the nested child is in 'child' or passed via router
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       body: Stack(
         children: [
           // Background ambient glows (top left teal, bottom right green)
@@ -23,7 +22,6 @@ class AuthShell extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.accent.withOpacity(0.08),
-                
               ),
             ),
           ),

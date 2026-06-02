@@ -5,8 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/extensions/double_ext.dart';
+import '../../../core/localization/translations.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../providers/transaction_provider.dart';
+import '../../providers/budget_provider.dart';
+import '../../providers/savings_provider.dart';
 import '../../../data/models/transaction_model.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -17,13 +21,16 @@ class DashboardScreen extends ConsumerWidget {
     final user = ref.watch(authStateProvider);
     final userName = user?.displayName ?? 'Utilisateur';
     final transactionsAsync = ref.watch(transactionsStreamProvider);
+    final goalsAsync = ref.watch(savingsGoalsStreamProvider);
+    final activeBudgetAsync = ref.watch(activeBudgetStreamProvider);
+    final lang = ref.watch(languageProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       body: SafeArea(
         child: transactionsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-          error: (err, stack) => Center(child: Text('Erreur: $err', style: const TextStyle(color: Colors.white))),
+          error: (err, stack) => Center(child: Text('${context.tr(ref, 'error')}: $err', style: TextStyle(color: context.textPrimary))),
           data: (transactions) {
             final income = user?.monthlyIncome ?? 250000.0;
             final currentMonthStr = DateFormat('yyyy-MM').format(DateTime.now());
@@ -39,52 +46,64 @@ class DashboardScreen extends ConsumerWidget {
             }).fold(0.0, (sum, tx) => sum + tx.amount);
 
             final double availableBalance = income + currentMonthIncomes - currentMonthExpenses;
-            final double monthlySavings = (income * 0.20) + (currentMonthIncomes - currentMonthExpenses).clamp(0, double.infinity);
+
+            final goals = goalsAsync.valueOrNull ?? [];
+            final double totalEpargne = goals.fold(0.0, (sum, g) => sum + g.current);
 
             final budgetUsagePct = income > 0 ? (currentMonthExpenses / income) : 0.0;
             final healthScore = (100 - (budgetUsagePct * 100)).clamp(0.0, 100.0).toInt();
 
-            String healthStatus = 'Excellent';
+            String healthStatus = context.tr(ref, 'home_health_excellent');
             Color healthColor = AppColors.primary;
             if (healthScore < 50) {
-              healthStatus = 'Critique';
+              healthStatus = context.tr(ref, 'home_health_critical');
               healthColor = AppColors.error;
             } else if (healthScore < 80) {
-              healthStatus = 'Moyen';
+              healthStatus = context.tr(ref, 'home_health_medium');
               healthColor = AppColors.secondary;
             }
 
-            return SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header Row
-                  _buildHeader(context, userName, user?.photoUrl),
-                  
-                  const SizedBox(height: 24),
+            return RefreshIndicator(
+              color: AppColors.primary,
+              backgroundColor: context.surfaceColor,
+              onRefresh: () async {
+                ref.invalidate(transactionsStreamProvider);
+                ref.invalidate(savingsGoalsStreamProvider);
+                ref.invalidate(activeBudgetStreamProvider);
+                await Future.delayed(const Duration(milliseconds: 800));
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header Row
+                    _buildHeader(context, ref, userName, user?.photoUrl),
+                    
+                    const SizedBox(height: 24),
 
-                  // Account Balance Card (Glowing Emerald Gradient)
-                  _buildBalanceCard(context, availableBalance, monthlySavings),
+                    // Account Balance Card (Glowing Emerald Gradient)
+                    _buildBalanceCard(context, ref, availableBalance, totalEpargne),
 
-                  const SizedBox(height: 28),
+                    const SizedBox(height: 28),
 
-                  // Quick Actions Row
-                  _buildQuickActions(context),
+                    // Quick Actions Row
+                    _buildQuickActions(context, ref),
 
-                  const SizedBox(height: 28),
+                    const SizedBox(height: 28),
 
-                  // Financial Health Card & Mini AI Banner (Double Grid / Column)
-                  _buildHealthAndCoachSection(context, healthScore, healthStatus, healthColor, currentMonthExpenses),
+                    // Financial Health Card & Mini AI Banner (Double Grid / Column)
+                    _buildHealthAndCoachSection(context, ref, healthScore, healthStatus, healthColor, currentMonthExpenses, lang),
 
-                  const SizedBox(height: 28),
+                    const SizedBox(height: 28),
 
-                  // Recent Transactions List
-                  _buildRecentTransactions(context, transactions),
-                  
-                  const SizedBox(height: 20),
-                ],
+                    // Recent Transactions List
+                    _buildRecentTransactions(context, ref, transactions),
+                    
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             );
           },
@@ -93,7 +112,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, String name, String? avatarUrl) {
+  Widget _buildHeader(BuildContext context, WidgetRef ref, String name, String? avatarUrl) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -101,9 +120,9 @@ class DashboardScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Bonjour,',
+              context.tr(ref, 'home_greeting'),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.darkTextSecondary,
+                color: context.textSecondary,
               ),
             ),
             Text(
@@ -111,6 +130,7 @@ class DashboardScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,
+                color: context.textPrimary,
               ),
             ),
           ],
@@ -118,7 +138,6 @@ class DashboardScreen extends ConsumerWidget {
         // Premium Profile Avatar
         GestureDetector(
           onTap: () {
-            // Take to profile tab
             context.go('/profile');
           },
           child: Container(
@@ -130,9 +149,9 @@ class DashboardScreen extends ConsumerWidget {
             child: CircleAvatar(
               radius: 22,
               backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-              backgroundColor: AppColors.darkSurfaceLight,
+              backgroundColor: context.surfaceColorLight,
               child: avatarUrl == null 
-                ? const Icon(Icons.person, color: AppColors.darkTextPrimary)
+                ? Icon(Icons.person, color: context.textPrimary)
                 : null,
             ),
           ),
@@ -141,7 +160,7 @@ class DashboardScreen extends ConsumerWidget {
     ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.1, end: 0);
   }
 
-  Widget _buildBalanceCard(BuildContext context, double currentBalance, double monthlySavings) {
+  Widget _buildBalanceCard(BuildContext context, WidgetRef ref, double currentBalance, double totalEpargne) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -163,7 +182,7 @@ class DashboardScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Solde disponible',
+                context.tr(ref, 'home_available'),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.black87,
                   fontWeight: FontWeight.w500,
@@ -189,12 +208,12 @@ class DashboardScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Épargne ce mois',
+                    context.tr(ref, 'home_saved'),
                     style: TextStyle(color: Colors.black.withOpacity(0.7), fontSize: 12),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    monthlySavings.toFCFA(),
+                    totalEpargne.toFCFA(),
                     style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ],
@@ -224,24 +243,25 @@ class DashboardScreen extends ConsumerWidget {
     ).animate().fadeIn(delay: 150.ms).scale(duration: 500.ms, curve: Curves.easeOutBack);
   }
 
-  Widget _buildQuickActions(BuildContext context) {
+  Widget _buildQuickActions(BuildContext context, WidgetRef ref) {
+    final isFr = ref.watch(languageProvider) == 'fr';
+    
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _buildActionItem(
           context,
           icon: Icons.qr_code_scanner_rounded,
-          label: 'Scan Reçu',
+          label: isFr ? 'Scan Reçu' : 'Scan Receipt',
           color: AppColors.accent,
           onTap: () {
-            // Take to adding transaction with mock OCR
             context.go('/transactions/add');
           },
         ),
         _buildActionItem(
           context,
           icon: Icons.mic_rounded,
-          label: 'Voix',
+          label: isFr ? 'Voix' : 'Voice',
           color: AppColors.secondary,
           onTap: () {
             context.go('/transactions/add');
@@ -250,7 +270,7 @@ class DashboardScreen extends ConsumerWidget {
         _buildActionItem(
           context,
           icon: Icons.add_rounded,
-          label: 'Transaction',
+          label: context.tr(ref, 'home_action_add_tx'),
           color: AppColors.primary,
           onTap: () {
             context.go('/transactions/add');
@@ -259,7 +279,7 @@ class DashboardScreen extends ConsumerWidget {
         _buildActionItem(
           context,
           icon: Icons.trending_down_rounded,
-          label: 'Simulateur',
+          label: isFr ? 'Simulateur' : 'Simulator',
           color: AppColors.info,
           onTap: () {
             context.go('/budget');
@@ -284,9 +304,9 @@ class DashboardScreen extends ConsumerWidget {
             height: 56,
             width: 56,
             decoration: BoxDecoration(
-              color: AppColors.darkSurface,
+              color: context.surfaceColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.darkBorder),
+              border: Border.all(color: context.borderColor),
             ),
             child: Icon(icon, color: color, size: 26),
           ),
@@ -294,7 +314,7 @@ class DashboardScreen extends ConsumerWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.darkTextPrimary,
+              color: context.textPrimary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -305,17 +325,28 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildHealthAndCoachSection(
     BuildContext context,
+    WidgetRef ref,
     int healthScore,
     String healthStatus,
     Color healthColor,
     double expenses,
+    String lang,
   ) {
-    // Generate dynamic tip based on health status
-    String coachTip = '"Votre santé financière est excellente. Continuez sur cette lancée en maintenant vos dépenses sous contrôle !"';
-    if (healthScore < 50) {
-      coachTip = '"Vos dépenses mensuelles sont très élevées. Pensez à limiter vos envies et concentrez-vous sur vos besoins stricts pour redresser la barre !"';
-    } else if (healthScore < 80) {
-      coachTip = '"Votre budget est un peu serré. Une réduction mineure de 10% sur vos loisirs ce mois-ci vous permettrait d\'équilibrer vos comptes."';
+    String coachTip = '';
+    if (lang == 'fr') {
+      coachTip = '"Votre santé financière est excellente. Continuez sur cette lancée en maintenant vos dépenses sous contrôle !"';
+      if (healthScore < 50) {
+        coachTip = '"Vos dépenses mensuelles sont très élevées. Pensez à limiter vos envies et concentrez-vous sur vos besoins stricts pour redresser la barre !"';
+      } else if (healthScore < 80) {
+        coachTip = '"Votre budget est un peu serré. Une réduction mineure de 10% sur vos loisirs ce mois-ci vous permettrait d\'équilibrer vos comptes."';
+      }
+    } else {
+      coachTip = '"Your financial health is excellent. Keep it up by keeping your spending under control!"';
+      if (healthScore < 50) {
+        coachTip = '"Your monthly expenses are very high. Think about limiting non-essentials and focus strictly on needs to get back on track!"';
+      } else if (healthScore < 80) {
+        coachTip = '"Your budget is slightly tight. A minor 10% reduction on leisure this month would help balance your accounts."';
+      }
     }
 
     return Row(
@@ -327,16 +358,16 @@ class DashboardScreen extends ConsumerWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.darkSurface,
+              color: context.surfaceColor,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.darkBorder),
+              border: Border.all(color: context.borderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Santé financière',
-                  style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+                Text(
+                  context.tr(ref, 'home_health'),
+                  style: TextStyle(color: context.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 16),
                 Center(
@@ -350,7 +381,7 @@ class DashboardScreen extends ConsumerWidget {
                         child: CircularProgressIndicator(
                           value: healthScore / 100.0,
                           strokeWidth: 8,
-                          backgroundColor: AppColors.darkBorder,
+                          backgroundColor: context.borderColor,
                           valueColor: AlwaysStoppedAnimation<Color>(healthColor),
                         ),
                       ),
@@ -359,11 +390,11 @@ class DashboardScreen extends ConsumerWidget {
                         children: [
                           Text(
                             '$healthScore',
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
                           ),
-                          const Text(
+                          Text(
                             '/100',
-                            style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 10),
+                            style: TextStyle(color: context.textSecondary, fontSize: 10),
                           ),
                         ],
                       ),
@@ -399,24 +430,24 @@ class DashboardScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.darkSurface, AppColors.darkSurfaceLight.withOpacity(0.3)],
+                colors: [context.surfaceColor, context.surfaceColorLight.withOpacity(0.3)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.darkBorder),
+              border: Border.all(color: context.borderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  children: const [
-                    Icon(Icons.psychology_rounded, color: AppColors.accent, size: 20),
-                    SizedBox(width: 8),
+                  children: [
+                    const Icon(Icons.psychology_rounded, color: AppColors.accent, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Conseil de FinCoach',
-                        style: TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold),
+                        lang == 'fr' ? 'Conseil de FinCoach' : 'FinCoach Advice',
+                        style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -427,16 +458,16 @@ class DashboardScreen extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     coachTip,
-                    style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 11, height: 1.4, fontStyle: FontStyle.italic),
+                    style: TextStyle(color: context.textPrimary, fontSize: 11, height: 1.4, fontStyle: FontStyle.italic),
                     overflow: TextOverflow.fade,
                   ),
                 ),
                 const SizedBox(height: 4),
                 GestureDetector(
-                  onTap: () => context.go('/profile'), // AI Coach is sub-branch of profile
-                  child: const Text(
-                    'Discuter →',
-                    style: TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.bold),
+                  onTap: () => context.go('/profile'), // Nav to Profile contains AI Coach in secondary sub-branch
+                  child: Text(
+                    lang == 'fr' ? 'Discuter →' : 'Discuss →',
+                    style: const TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -447,8 +478,9 @@ class DashboardScreen extends ConsumerWidget {
     ).animate().fadeIn(delay: 350.ms).slideY(begin: 0.1, end: 0);
   }
 
-  Widget _buildRecentTransactions(BuildContext context, List<TransactionModel> txs) {
+  Widget _buildRecentTransactions(BuildContext context, WidgetRef ref, List<TransactionModel> txs) {
     final displayTxs = txs.take(3).toList();
+    final lang = ref.watch(languageProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,17 +489,18 @@ class DashboardScreen extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Transactions récentes',
+              context.tr(ref, 'home_recent_tx'),
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,
+                color: context.textPrimary,
               ),
             ),
             GestureDetector(
               onTap: () => context.go('/transactions'),
-              child: const Text(
-                'Voir tout',
-                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+              child: Text(
+                context.tr(ref, 'home_see_all'),
+                style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -478,14 +511,14 @@ class DashboardScreen extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 24),
             decoration: BoxDecoration(
-              color: AppColors.darkSurface,
+              color: context.surfaceColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.darkBorder),
+              border: Border.all(color: context.borderColor),
             ),
-            child: const Center(
+            child: Center(
               child: Text(
-                'Aucune transaction récente',
-                style: TextStyle(color: AppColors.darkTextSecondary),
+                lang == 'fr' ? 'Aucune transaction récente' : 'No recent transactions',
+                style: TextStyle(color: context.textSecondary),
               ),
             ),
           )
@@ -503,9 +536,9 @@ class DashboardScreen extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: AppColors.darkSurface,
+                  color: context.surfaceColor,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.darkBorder),
+                  border: Border.all(color: context.borderColor),
                 ),
                 child: Row(
                   children: [
@@ -528,12 +561,12 @@ class DashboardScreen extends ConsumerWidget {
                         children: [
                           Text(
                             tx.description,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                            style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             '${tx.category} • $formattedDate',
-                            style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
+                            style: TextStyle(color: context.textSecondary, fontSize: 11),
                           ),
                         ],
                       ),
@@ -541,7 +574,7 @@ class DashboardScreen extends ConsumerWidget {
                     Text(
                       (isExpense ? '-' : '+') + tx.amount.toFCFA(),
                       style: TextStyle(
-                        color: isExpense ? Colors.white : AppColors.primary,
+                        color: isExpense ? context.textPrimary : AppColors.primary,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),

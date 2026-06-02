@@ -56,6 +56,16 @@ class AuthRepository {
     await _auth.signOut();
   }
 
+  Future<void> updateDisplayName(String uid, String displayName) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      await user.updateDisplayName(displayName);
+    }
+    await _firestore.collection('users').doc(uid).update({
+      'displayName': displayName,
+    });
+  }
+
   Future<void> updateMonthlyIncome(String uid, double income) async {
     await _firestore.collection('users').doc(uid).update({
       'monthlyIncome': income,

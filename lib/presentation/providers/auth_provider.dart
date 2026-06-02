@@ -72,6 +72,12 @@ class AuthNotifier extends StateNotifier<UserModel?> {
     state = null;
   }
 
+  Future<void> updateDisplayName(String displayName) async {
+    if (state == null) return;
+    await _authRepo.updateDisplayName(state!.uid, displayName);
+    state = state!.copyWith(displayName: displayName);
+  }
+
   Future<void> updateIncome(double income) async {
     if (state == null) return;
     await _authRepo.updateMonthlyIncome(state!.uid, income);

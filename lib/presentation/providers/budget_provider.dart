@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/repositories/budget_repository.dart';
 import '../../data/models/budget_model.dart';
+import '../../data/models/transaction_model.dart';
 import 'auth_provider.dart';
+import 'transaction_provider.dart';
 
 final budgetRepositoryProvider = Provider<BudgetRepository>((ref) {
   return BudgetRepository();
@@ -14,7 +16,28 @@ final budgetStreamProvider = StreamProvider.family<BudgetModel?, String>((ref, m
   if (user == null) {
     return Stream.value(null);
   }
-  return ref.watch(budgetRepositoryProvider).watchBudget(user.uid, month);
+  
+  final budgetStream = ref.watch(budgetRepositoryProvider).watchBudget(user.uid, month);
+  final transactionsAsync = ref.watch(transactionsStreamProvider);
+  
+  return budgetStream.map((budget) {
+    if (budget == null) return null;
+    
+    final transactions = transactionsAsync.valueOrNull ?? [];
+    
+    final updatedCategories = budget.categories.map((catName, catBudget) {
+      final spentForCat = transactions.where((tx) {
+        final txMonth = DateFormat('yyyy-MM').format(tx.date);
+        return tx.category == catName &&
+               tx.type == TransactionType.expense &&
+               txMonth == month;
+      }).fold(0.0, (sum, tx) => sum + tx.amount);
+      
+      return MapEntry(catName, catBudget.copyWith(spent: spentForCat));
+    });
+    
+    return budget.copyWith(categories: updatedCategories);
+  });
 });
 
 // Current active month provider (default: current calendar month)
@@ -29,7 +52,28 @@ final activeBudgetStreamProvider = StreamProvider<BudgetModel?>((ref) {
   if (user == null) {
     return Stream.value(null);
   }
-  return ref.watch(budgetRepositoryProvider).watchBudget(user.uid, activeMonth);
+  
+  final budgetStream = ref.watch(budgetRepositoryProvider).watchBudget(user.uid, activeMonth);
+  final transactionsAsync = ref.watch(transactionsStreamProvider);
+  
+  return budgetStream.map((budget) {
+    if (budget == null) return null;
+    
+    final transactions = transactionsAsync.valueOrNull ?? [];
+    
+    final updatedCategories = budget.categories.map((catName, catBudget) {
+      final spentForCat = transactions.where((tx) {
+        final txMonth = DateFormat('yyyy-MM').format(tx.date);
+        return tx.category == catName &&
+               tx.type == TransactionType.expense &&
+               txMonth == activeMonth;
+      }).fold(0.0, (sum, tx) => sum + tx.amount);
+      
+      return MapEntry(catName, catBudget.copyWith(spent: spentForCat));
+    });
+    
+    return budget.copyWith(categories: updatedCategories);
+  });
 });
 
 // StateNotifier to perform budget management operations
@@ -81,9 +125,37 @@ class BudgetOperationsNotifier extends StateNotifier<AsyncValue<void>> {
       );
 
       await _repository.setBudget(_uid, updatedBudget);
+
+      state = const AsyncData(null);
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+    }
+  }
+
+  Future<void> addCategory(BudgetModel currentBudget, String category, double limit) async {
+    if (_uid == null) return;
+    state = const AsyncLoading();
+    try {
+      final categories = Map<String, CategoryBudget>.from(currentBudget.categories);
+      if (categories.containsKey(category)) {
+        throw Exception('La catégorie existe déjà.');
+      }
+      categories[category] = CategoryBudget(limit: limit, spent: 0.0);
+
+      // Re-calculate total budget
+      double newTotal = categories.values.fold(0.0, (sum, cat) => sum + cat.limit);
+
+      final updatedBudget = currentBudget.copyWith(
+        categories: categories,
+        totalBudget: newTotal,
+      );
+
+      await _repository.setBudget(_uid, updatedBudget);
+
       state = const AsyncData(null);
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
   }
 }
+

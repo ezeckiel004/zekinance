@@ -3,7 +3,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../../core/localization/translations.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/settings_provider.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -31,10 +33,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final isFr = ref.read(languageProvider) == 'fr';
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez remplir tous les champs')),
+        SnackBar(content: Text(isFr ? 'Veuillez remplir tous les champs' : 'Please fill in all fields')),
       );
       return;
     }
@@ -48,8 +51,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errMsg = isFr ? "Erreur d'inscription" : 'Registration error';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur d\'inscription : ${e.toString().split(']').last.trim()}')),
+          SnackBar(content: Text('$errMsg: ${e.toString().split(']').last.trim()}')),
         );
       }
     } finally {
@@ -61,8 +65,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isFr = ref.watch(languageProvider) == 'fr';
+    
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -72,17 +78,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               // Back Button
               IconButton(
                 onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.darkTextPrimary),
+                icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.textPrimary),
               ).animate().fadeIn(duration: 300.ms),
 
               const SizedBox(height: 20),
 
               // Title
               Text(
-                'Créer un compte',
+                context.tr(ref, 'register_title'),
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                   letterSpacing: -0.5,
+                  color: context.textPrimary,
                 ),
               ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1, end: 0),
 
@@ -90,9 +97,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
               // Subtitle
               Text(
-                'Commencez votre voyage vers l’excellence financière dès aujourd’hui.',
+                context.tr(ref, 'register_subtitle'),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.darkTextSecondary,
+                  color: context.textSecondary,
                 ),
               ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
 
@@ -101,9 +108,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               // Name Input
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nom complet',
-                  prefixIcon: Icon(Icons.person_outline_rounded, color: AppColors.darkTextSecondary),
+                style: TextStyle(color: context.textPrimary),
+                decoration: InputDecoration(
+                  labelText: context.tr(ref, 'name_label'),
+                  prefixIcon: Icon(Icons.person_outline_rounded, color: context.textSecondary),
                   hintText: 'Jean Dupont',
                 ),
               ).animate().fadeIn(delay: 300.ms),
@@ -114,9 +122,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Adresse Email',
-                  prefixIcon: Icon(Icons.email_outlined, color: AppColors.darkTextSecondary),
+                style: TextStyle(color: context.textPrimary),
+                decoration: InputDecoration(
+                  labelText: context.tr(ref, 'email_label'),
+                  prefixIcon: Icon(Icons.email_outlined, color: context.textSecondary),
                   hintText: 'exemple@domaine.com',
                 ),
               ).animate().fadeIn(delay: 400.ms),
@@ -127,13 +136,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
+                style: TextStyle(color: context.textPrimary),
                 decoration: InputDecoration(
-                  labelText: 'Mot de passe',
-                  prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppColors.darkTextSecondary),
+                  labelText: context.tr(ref, 'password_label'),
+                  prefixIcon: Icon(Icons.lock_outline_rounded, color: context.textSecondary),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: AppColors.darkTextSecondary,
+                      color: context.textSecondary,
                     ),
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
@@ -144,9 +154,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
               // Terms & Conditions Warning
               Text(
-                "En créant un compte, vous acceptez nos Conditions d'Utilisation et notre Politique de Confidentialité.",
+                isFr 
+                  ? "En créant un compte, vous acceptez nos Conditions d'Utilisation et notre Politique de Confidentialité." 
+                  : "By creating an account, you agree to our Terms of Use and Privacy Policy.",
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.darkTextSecondary,
+                  color: context.textSecondary,
                 ),
               ).animate().fadeIn(delay: 550.ms),
 
@@ -163,7 +175,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                         )
-                      : const Text("S'inscrire"),
+                      : Text(context.tr(ref, 'register_btn')),
                 ),
               ).animate().fadeIn(delay: 600.ms),
 
@@ -173,15 +185,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text(
-                    'Vous avez déjà un compte ? ',
-                    style: TextStyle(color: AppColors.darkTextSecondary),
+                  Text(
+                    isFr ? 'Vous avez déjà un compte ? ' : 'Already have an account? ',
+                    style: TextStyle(color: context.textSecondary),
                   ),
                   GestureDetector(
                     onTap: () => context.pop(),
-                    child: const Text(
-                      'Se connecter',
-                      style: TextStyle(
+                    child: Text(
+                      isFr ? 'Se connecter' : 'Log In',
+                      style: const TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.bold,
                       ),

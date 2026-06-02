@@ -5,15 +5,36 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/extensions/double_ext.dart';
+import '../../../core/localization/translations.dart';
 import '../../providers/budget_provider.dart';
 import '../../providers/transaction_provider.dart';
 import '../../../data/models/budget_model.dart';
 import '../../../data/models/transaction_model.dart';
+import '../../providers/settings_provider.dart';
 
 class BudgetDetailScreen extends ConsumerWidget {
   final String categoryId;
 
   const BudgetDetailScreen({super.key, required this.categoryId});
+
+  String _getCategoryDisplayName(String key, bool isFr) {
+    switch (key) {
+      case 'Alimentation':
+        return isFr ? 'Alimentation' : 'Food & Groceries';
+      case 'Loyer & Factures':
+        return isFr ? 'Loyer & Factures' : 'Rent & Bills';
+      case 'Divertissement':
+        return isFr ? 'Divertissement' : 'Entertainment';
+      case 'Transport':
+        return isFr ? 'Transport' : 'Transportation';
+      case 'Santé':
+        return isFr ? 'Santé' : 'Health';
+      case 'Autres':
+        return isFr ? 'Autres' : 'Others';
+      default:
+        return key;
+    }
+  }
 
   IconData _getCategoryIcon(String name) {
     switch (name) {
@@ -49,18 +70,18 @@ class BudgetDetailScreen extends ConsumerWidget {
     }
   }
 
-  String _getMethodType(String name) {
+  String _getMethodType(String name, bool isFr) {
     switch (name) {
       case 'Alimentation':
       case 'Loyer & Factures':
       case 'Transport':
       case 'Santé':
-        return 'Besoins stricts (50%)';
+        return isFr ? 'Besoins stricts (50%)' : 'Strict Needs (50%)';
       case 'Divertissement':
       case 'Autres':
-        return 'Envies & Plaisirs (30%)';
+        return isFr ? 'Envies & Plaisirs (30%)' : 'Wants & Leisure (30%)';
       default:
-        return 'Besoins stricts (50%)';
+        return isFr ? 'Besoins stricts (50%)' : 'Strict Needs (50%)';
     }
   }
 
@@ -69,18 +90,22 @@ class BudgetDetailScreen extends ConsumerWidget {
     final activeBudgetAsync = ref.watch(activeBudgetStreamProvider);
     final transactionsAsync = ref.watch(transactionsStreamProvider);
     final activeMonth = ref.watch(activeMonthProvider);
+    final isFr = ref.watch(languageProvider) == 'fr';
 
     final catColor = _getCategoryColor(categoryId);
     final catIcon = _getCategoryIcon(categoryId);
-    final methodType = _getMethodType(categoryId);
+    final methodType = _getMethodType(categoryId, isFr);
 
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       appBar: AppBar(
-        title: Text(categoryId),
+        title: Text(
+          _getCategoryDisplayName(categoryId, isFr),
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+        ),
         leading: IconButton(
           onPressed: () => context.pop(),
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.textPrimary),
         ),
       ),
       body: SafeArea(
@@ -90,16 +115,16 @@ class BudgetDetailScreen extends ConsumerWidget {
           ),
           error: (err, stack) => Center(
             child: Text(
-              'Erreur lors du chargement : $err',
-              style: const TextStyle(color: Colors.white),
+              '${context.tr(ref, 'error')}: $err',
+              style: TextStyle(color: context.textPrimary),
             ),
           ),
           data: (budget) {
             if (budget == null) {
               return Center(
                 child: Text(
-                  'Aucun budget configuré pour ce mois.',
-                  style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 16),
+                  isFr ? 'Aucun budget configuré pour ce mois.' : 'No budget configured for this month.',
+                  style: TextStyle(color: context.textSecondary, fontSize: 16),
                 ),
               );
             }
@@ -116,8 +141,10 @@ class BudgetDetailScreen extends ConsumerWidget {
               ),
               error: (err, stack) => Center(
                 child: Text(
-                  'Erreur lors du chargement des transactions : $err',
-                  style: const TextStyle(color: Colors.white),
+                  isFr 
+                    ? 'Erreur lors du chargement des transactions : $err' 
+                    : 'Error loading transactions: $err',
+                  style: TextStyle(color: context.textPrimary),
                 ),
               ),
               data: (transactions) {
@@ -144,19 +171,21 @@ class BudgetDetailScreen extends ConsumerWidget {
                         catColor,
                         catIcon,
                         methodType,
+                        isFr,
                       ),
 
                       const SizedBox(height: 32),
 
-                      _buildCategoryActions(context, ref, budget, limit),
+                      _buildCategoryActions(context, ref, budget, limit, isFr),
 
                       const SizedBox(height: 32),
 
                       Text(
-                        'Dépenses de ce mois',
+                        isFr ? 'Dépenses de ce mois' : 'Expenses this month',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                               letterSpacing: -0.5,
+                              color: context.textPrimary,
                             ),
                       ).animate().fadeIn(delay: 200.ms),
 
@@ -167,15 +196,15 @@ class BudgetDetailScreen extends ConsumerWidget {
                               width: double.infinity,
                               padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
-                                color: AppColors.darkSurface,
+                                color: context.surfaceColor,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.darkBorder),
+                                border: Border.all(color: context.borderColor),
                               ),
-                              child: const Center(
+                              child: Center(
                                 child: Text(
-                                  'Aucune dépense enregistrée ce mois-ci.',
+                                  isFr ? 'Aucune dépense enregistrée ce mois-ci.' : 'No expenses recorded this month.',
                                   style: TextStyle(
-                                    color: AppColors.darkTextSecondary,
+                                    color: context.textSecondary,
                                     fontSize: 14,
                                     fontStyle: FontStyle.italic,
                                   ),
@@ -188,15 +217,17 @@ class BudgetDetailScreen extends ConsumerWidget {
                               itemCount: categoryTransactions.length,
                               itemBuilder: (context, index) {
                                 final tx = categoryTransactions[index];
-                                final formattedDate = DateFormat('dd MMMM yyyy à HH:mm').format(tx.date);
+                                final formattedDate = isFr
+                                    ? DateFormat('dd MMMM yyyy à HH:mm', 'fr_FR').format(tx.date)
+                                    : DateFormat('dd MMMM yyyy at HH:mm', 'en_US').format(tx.date);
 
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                   decoration: BoxDecoration(
-                                    color: AppColors.darkSurface,
+                                    color: context.surfaceColor,
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: AppColors.darkBorder),
+                                    border: Border.all(color: context.borderColor),
                                   ),
                                   child: Row(
                                     children: [
@@ -215,13 +246,13 @@ class BudgetDetailScreen extends ConsumerWidget {
                                           children: [
                                             Text(
                                               tx.description,
-                                              style: const TextStyle(
-                                                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                              style: TextStyle(
+                                                  color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
                                               formattedDate,
-                                              style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
+                                              style: TextStyle(color: context.textSecondary, fontSize: 11),
                                             ),
                                           ],
                                         ),
@@ -229,8 +260,8 @@ class BudgetDetailScreen extends ConsumerWidget {
                                       Flexible(
                                         child: Text(
                                           '-${tx.amount.toFCFA()}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: TextStyle(
+                                            color: context.textPrimary,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
                                           ),
@@ -264,6 +295,7 @@ class BudgetDetailScreen extends ConsumerWidget {
     Color color,
     IconData icon,
     String method,
+    bool isFr,
   ) {
     final isCritique = pct >= 90;
     final isAlerte = pct >= 70;
@@ -279,15 +311,15 @@ class BudgetDetailScreen extends ConsumerWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 22),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
+        color: context.surfaceColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(color: context.borderColor),
       ),
       child: Column(
         children: [
           Text(
             method.toUpperCase(),
-            style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+            style: TextStyle(color: context.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0),
           ),
           const SizedBox(height: 24),
           Stack(
@@ -299,7 +331,7 @@ class BudgetDetailScreen extends ConsumerWidget {
                 child: CircularProgressIndicator(
                   value: pct / 100,
                   strokeWidth: 14,
-                  backgroundColor: AppColors.darkBorder,
+                  backgroundColor: context.borderColor,
                   valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                 ),
               ),
@@ -310,33 +342,33 @@ class BudgetDetailScreen extends ConsumerWidget {
                   const SizedBox(height: 6),
                   Text(
                     '${pct.toInt()}%',
-                    style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+                    style: TextStyle(color: context.textPrimary, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -0.5),
                   ),
-                  const Text(
-                    'utilisé',
-                    style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 12),
+                  Text(
+                    isFr ? 'utilisé' : 'used',
+                    style: TextStyle(color: context.textSecondary, fontSize: 12),
                   ),
                 ],
               ),
             ],
           ).animate().scale(duration: 500.ms, curve: Curves.easeOutBack),
           const SizedBox(height: 28),
-          const Divider(color: AppColors.darkBorder),
+          Divider(color: context.borderColor),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               Column(
                 children: [
-                  const Text('DÉPENSÉ', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11, fontWeight: FontWeight.w500)),
+                  Text(isFr ? 'DÉPENSÉ' : 'SPENT', style: TextStyle(color: context.textSecondary, fontSize: 11, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
                   Text(spent.toFCFA(), style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 16)),
                 ],
               ),
-              Container(width: 1, height: 35, color: AppColors.darkBorder),
+              Container(width: 1, height: 35, color: context.borderColor),
               Column(
                 children: [
-                  const Text('RESTANT', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11, fontWeight: FontWeight.w500)),
+                  Text(isFr ? 'RESTANT' : 'REMAINING', style: TextStyle(color: context.textSecondary, fontSize: 11, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
                   Text(remaining.toFCFA(), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 16)),
                 ],
@@ -348,14 +380,14 @@ class BudgetDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildCategoryActions(BuildContext context, WidgetRef ref, BudgetModel budget, double currentLimit) {
+  Widget _buildCategoryActions(BuildContext context, WidgetRef ref, BudgetModel budget, double currentLimit, bool isFr) {
     return Row(
       children: [
         Expanded(
           child: ElevatedButton.icon(
             onPressed: () => context.push('/transactions/add'),
             icon: const Icon(Icons.add_rounded, color: Colors.black),
-            label: const Text('Ajouter dépense'),
+            label: Text(isFr ? 'Ajouter dépense' : 'Add Expense'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.black,
@@ -365,26 +397,26 @@ class BudgetDetailScreen extends ConsumerWidget {
         const SizedBox(width: 12),
         Container(
           decoration: BoxDecoration(
-            color: AppColors.darkSurface,
-            border: Border.all(color: AppColors.darkBorder),
+            color: context.surfaceColor,
+            border: Border.all(color: context.borderColor),
             borderRadius: BorderRadius.circular(12),
           ),
           child: IconButton(
-            onPressed: () => _showEditLimitSheet(context, ref, budget, currentLimit),
-            icon: const Icon(Icons.edit_rounded, color: AppColors.darkTextPrimary),
+            onPressed: () => _showEditLimitSheet(context, ref, budget, currentLimit, isFr),
+            icon: Icon(Icons.edit_rounded, color: context.textPrimary),
           ),
         ),
       ],
     ).animate().fadeIn(delay: 150.ms);
   }
 
-  void _showEditLimitSheet(BuildContext context, WidgetRef ref, BudgetModel budget, double currentLimit) {
+  void _showEditLimitSheet(BuildContext context, WidgetRef ref, BudgetModel budget, double currentLimit, bool isFr) {
     final controller = TextEditingController(text: currentLimit.toInt().toString());
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.darkSurface,
+      backgroundColor: context.surfaceColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -404,30 +436,34 @@ class BudgetDetailScreen extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Modifier la limite — $categoryId',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    isFr 
+                      ? 'Modifier la limite — ${_getCategoryDisplayName(categoryId, true)}' 
+                      : 'Modify Limit — ${_getCategoryDisplayName(categoryId, false)}',
+                    style: TextStyle(
+                      color: context.textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, color: AppColors.darkTextSecondary),
+                    icon: Icon(Icons.close_rounded, color: context.textSecondary),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Entrez la nouvelle limite budgétaire mensuelle affectée à cette catégorie.',
-                style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13),
+              Text(
+                isFr 
+                  ? 'Entrez la nouvelle limite budgétaire mensuelle affectée à cette catégorie.' 
+                  : 'Enter the new monthly budget limit allocated to this category.',
+                style: TextStyle(color: context.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 24),
               TextField(
                 controller: controller,
                 keyboardType: TextInputType.number,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
                 decoration: const InputDecoration(
                   prefixText: 'FCFA  ',
                   prefixStyle: TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.bold),
@@ -444,8 +480,12 @@ class BudgetDetailScreen extends ConsumerWidget {
 
                     if (newLimit == null || newLimit < 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Veuillez entrer une limite valide supérieure ou égale à 0'),
+                        SnackBar(
+                          content: Text(
+                            isFr 
+                              ? 'Veuillez entrer une limite valide supérieure ou égale à 0' 
+                              : 'Please enter a valid limit greater than or equal to 0'
+                          ),
                         ),
                       );
                       return;
@@ -461,7 +501,11 @@ class BudgetDetailScreen extends ConsumerWidget {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Limite de $categoryId mise à jour !'),
+                            content: Text(
+                              isFr
+                                ? 'Limite de ${_getCategoryDisplayName(categoryId, true)} mise à jour !'
+                                : 'Limit of ${_getCategoryDisplayName(categoryId, false)} updated!'
+                            ),
                             backgroundColor: AppColors.primary,
                           ),
                         );
@@ -470,14 +514,14 @@ class BudgetDetailScreen extends ConsumerWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Erreur: $e'),
+                            content: Text('${context.tr(ref, 'error')}: $e'),
                             backgroundColor: AppColors.error,
                           ),
                         );
                       }
                     }
                   },
-                  child: const Text('Sauvegarder'),
+                  child: Text(isFr ? 'Sauvegarder' : 'Save'),
                 ),
               ),
             ],

@@ -58,3 +58,13 @@ class AppColors {
     end: Alignment.bottomCenter,
   );
 }
+
+extension ThemeContextExt on BuildContext {
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+  Color get surfaceColor => isDark ? AppColors.darkSurface : AppColors.lightSurface;
+  Color get surfaceColorLight => isDark ? AppColors.darkSurfaceLight : AppColors.lightSurfaceDark;
+  Color get borderColor => isDark ? AppColors.darkBorder : AppColors.lightBorder;
+  Color get textPrimary => isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+  Color get textSecondary => isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+  Color get scaffoldBg => Theme.of(this).scaffoldBackgroundColor;
+}

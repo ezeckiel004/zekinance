@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../../core/localization/translations.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final StatefulNavigationShell shell;
 
   const MainShell({super.key, required this.shell});
@@ -15,33 +17,33 @@ class MainShell extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       body: shell,
       bottomNavigationBar: NavigationBar(
         selectedIndex: shell.currentIndex,
         onDestinationSelected: _onTap,
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.grid_view_rounded),
-            label: 'Accueil',
+            icon: const Icon(Icons.grid_view_rounded),
+            label: context.tr(ref, 'nav_home'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.pie_chart_rounded),
-            label: 'Budget',
+            icon: const Icon(Icons.pie_chart_rounded),
+            label: context.tr(ref, 'nav_budgets'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.receipt_long_rounded),
-            label: 'Flux',
+            icon: const Icon(Icons.receipt_long_rounded),
+            label: context.tr(ref, 'nav_transactions'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.savings_rounded),
-            label: 'Épargne',
+            icon: const Icon(Icons.savings_rounded),
+            label: context.tr(ref, 'nav_savings'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.psychology_rounded), // AI Coach icon
-            label: 'Coach IA',
+            icon: const Icon(Icons.psychology_rounded),
+            label: context.tr(ref, 'nav_coach'),
           ),
         ],
       ),

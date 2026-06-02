@@ -1,7 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories/savings_repository.dart';
+import '../../data/repositories/transaction_repository.dart';
 import '../../data/models/savings_goal_model.dart';
+import '../../data/models/transaction_model.dart';
 import 'auth_provider.dart';
+import 'transaction_provider.dart';
+import 'budget_provider.dart';
 
 final savingsRepositoryProvider = Provider<SavingsRepository>((ref) {
   return SavingsRepository();
@@ -19,15 +24,19 @@ final savingsGoalsStreamProvider = StreamProvider<List<SavingsGoalModel>>((ref) 
 // StateNotifier for performing operations on savings goals
 final savingsOperationsProvider = StateNotifierProvider<SavingsOperationsNotifier, AsyncValue<void>>((ref) {
   final repository = ref.watch(savingsRepositoryProvider);
+  final transactionRepository = ref.watch(transactionRepositoryProvider);
   final user = ref.watch(authStateProvider);
-  return SavingsOperationsNotifier(repository, user?.uid);
+  return SavingsOperationsNotifier(repository, transactionRepository, ref, user?.uid);
 });
 
 class SavingsOperationsNotifier extends StateNotifier<AsyncValue<void>> {
   final SavingsRepository _repository;
+  final TransactionRepository _transactionRepository;
+  final Ref? _ref;
   final String? _uid;
 
-  SavingsOperationsNotifier(this._repository, this._uid) : super(const AsyncData(null));
+  SavingsOperationsNotifier(this._repository, this._transactionRepository, this._ref, this._uid)
+      : super(const AsyncData(null));
 
   Future<void> addGoal({
     required String name,
@@ -95,11 +104,47 @@ class SavingsOperationsNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<void> makeDeposit(String goalId, double amount) async {
+  Future<void> makeDeposit(SavingsGoalModel goal, double amount) async {
     if (_uid == null) return;
     state = const AsyncLoading();
     try {
-      await _repository.addSavingsDeposit(_uid, goalId, amount);
+      // 1. Enregistrer le dépôt dans les objectifs d'épargne
+      await _repository.addSavingsDeposit(_uid, goal.id, amount);
+
+      // 2. Chercher si une catégorie personnalisée "Épargne" ou "Epargne" existe dans le budget
+      String categoryToUse = 'Autres';
+      try {
+        final activeBudget = _ref?.read(activeBudgetStreamProvider).valueOrNull;
+        if (activeBudget != null) {
+          final matchedCategory = activeBudget.categories.keys.firstWhere(
+            (k) => k.toLowerCase() == 'épargne' || k.toLowerCase() == 'epargne',
+            orElse: () => '',
+          );
+          if (matchedCategory.isNotEmpty) {
+            categoryToUse = matchedCategory;
+          }
+        }
+      } catch (_) {}
+
+      // 3. Créer automatiquement une transaction de dépense correspondante
+      final txId = FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('transactions')
+          .doc()
+          .id;
+
+      final transaction = TransactionModel(
+        id: txId,
+        type: TransactionType.expense,
+        amount: amount,
+        category: categoryToUse,
+        description: 'Épargne : ${goal.name}',
+        date: DateTime.now(),
+      );
+
+      await _transactionRepository.addTransaction(_uid, transaction);
+      
       state = const AsyncData(null);
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);

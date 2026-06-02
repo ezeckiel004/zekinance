@@ -5,10 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/extensions/double_ext.dart';
+import '../../../core/localization/translations.dart';
 import '../../providers/transaction_provider.dart';
 import '../../../data/models/transaction_model.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/budget_provider.dart';
+import '../../providers/settings_provider.dart';
 
 class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({super.key});
@@ -21,14 +21,37 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   int _activeFilter = 0; // 0 = Tout, 1 = Dépenses, 2 = Revenus
   String _searchQuery = '';
 
+  String _getCategoryDisplayName(String key, bool isFr) {
+    switch (key) {
+      case 'Alimentation':
+        return isFr ? 'Alimentation' : 'Food & Groceries';
+      case 'Loyer & Factures':
+        return isFr ? 'Loyer & Factures' : 'Rent & Bills';
+      case 'Divertissement':
+        return isFr ? 'Divertissement' : 'Entertainment';
+      case 'Transport':
+        return isFr ? 'Transport' : 'Transportation';
+      case 'Santé':
+        return isFr ? 'Santé' : 'Health';
+      case 'Autres':
+        return isFr ? 'Autres' : 'Others';
+      default:
+        return key;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final transactionsAsync = ref.watch(transactionsStreamProvider);
+    final isFr = ref.watch(languageProvider) == 'fr';
 
     return Scaffold(
-      backgroundColor: AppColors.darkBg,
+      backgroundColor: context.scaffoldBg,
       appBar: AppBar(
-        title: const Text('Mes Flux Financiers'),
+        title: Text(
+          isFr ? 'Mes Flux Financiers' : 'My Financial Flows',
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/transactions/add'),
@@ -38,7 +61,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       body: SafeArea(
         child: transactionsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-          error: (err, stack) => Center(child: Text('Erreur: $err', style: const TextStyle(color: Colors.white))),
+          error: (err, stack) => Center(child: Text('${context.tr(ref, 'error')}: $err', style: TextStyle(color: context.textPrimary))),
           data: (transactions) {
             final filteredTxs = transactions.where((tx) {
               final matchesSearch = tx.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
@@ -65,21 +88,25 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                             _searchQuery = val;
                           });
                         },
-                        decoration: const InputDecoration(
-                          hintText: 'Rechercher un commerce, une catégorie...',
-                          prefixIcon: Icon(Icons.search_rounded, color: AppColors.darkTextSecondary),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        style: TextStyle(color: context.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: isFr 
+                              ? 'Rechercher un commerce, une catégorie...' 
+                              : 'Search commercial, category...',
+                          hintStyle: TextStyle(color: context.textSecondary.withOpacity(0.5)),
+                          prefixIcon: Icon(Icons.search_rounded, color: context.textSecondary),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                       ),
                       const SizedBox(height: 16),
                       // Custom Capsule Filters
                       Row(
                         children: [
-                          _buildFilterChip(0, 'Tout'),
+                          _buildFilterChip(0, isFr ? 'Tout' : 'All'),
                           const SizedBox(width: 8),
-                          _buildFilterChip(1, 'Dépenses'),
+                          _buildFilterChip(1, isFr ? 'Dépenses' : 'Expenses'),
                           const SizedBox(width: 8),
-                          _buildFilterChip(2, 'Revenus'),
+                          _buildFilterChip(2, isFr ? 'Revenus' : 'Incomes'),
                         ],
                       ),
                     ],
@@ -90,138 +117,160 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
                 // Transactions list
                 Expanded(
-                  child: filteredTxs.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.hourglass_empty_rounded, size: 48, color: AppColors.darkTextSecondary),
-                            SizedBox(height: 16),
-                            Text(
-                              'Aucune transaction trouvée',
-                              style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: filteredTxs.length,
-                        itemBuilder: (context, index) {
-                          final tx = filteredTxs[index];
-                          final isExpense = tx.type == TransactionType.expense;
-                          final formattedDate = DateFormat('dd MMMM yyyy à HH:mm').format(tx.date);
-
-                          return Dismissible(
-                            key: Key(tx.id),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              decoration: BoxDecoration(
-                                color: AppColors.error.withOpacity(0.8),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
-                            ),
-                            confirmDismiss: (direction) async {
-                              return await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  backgroundColor: AppColors.darkSurface,
-                                  title: const Text('Supprimer la transaction ?', style: TextStyle(color: Colors.white)),
-                                  content: const Text(
-                                    'Voulez-vous vraiment supprimer cette transaction ? Cette action recalculera vos budgets.',
-                                    style: TextStyle(color: AppColors.darkTextSecondary),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.of(ctx).pop(false),
-                                      child: const Text('Annuler', style: TextStyle(color: AppColors.darkTextSecondary)),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => Navigator.of(ctx).pop(true),
-                                      child: const Text('Supprimer', style: TextStyle(color: AppColors.error)),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                            onDismissed: (direction) async {
-                              // Perform deletion in Firestore
-                              await ref.read(transactionOperationsProvider.notifier).delete(tx.id);
-                              
-                              // Recalculate and decrement budget if it was an expense
-                              if (isExpense) {
-                                final activeMonth = DateFormat('yyyy-MM').format(tx.date);
-                                await ref.read(budgetRepositoryProvider).incrementCategorySpent(
-                                  ref.read(authStateProvider)!.uid,
-                                  activeMonth,
-                                  tx.category,
-                                  -tx.amount,
-                                );
-                              }
-
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Transaction supprimée avec succès')),
-                                );
-                              }
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: AppColors.darkSurface,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: AppColors.darkBorder),
-                              ),
-                              child: Row(
+                  child: RefreshIndicator(
+                    color: AppColors.primary,
+                    backgroundColor: context.surfaceColor,
+                    onRefresh: () async {
+                      ref.invalidate(transactionsStreamProvider);
+                      await Future.delayed(const Duration(milliseconds: 800));
+                    },
+                    child: filteredTxs.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          children: [
+                            SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                            Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: (isExpense ? AppColors.error : AppColors.primary).withOpacity(0.12),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      isExpense ? Icons.shopping_bag_outlined : Icons.monetization_on_outlined,
-                                      color: isExpense ? AppColors.error : AppColors.primary,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          tx.description,
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${tx.category} • $formattedDate',
-                                          style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  Icon(Icons.hourglass_empty_rounded, size: 48, color: context.textSecondary),
+                                  const SizedBox(height: 16),
                                   Text(
-                                    (isExpense ? '-' : '+') + tx.amount.toFCFA(),
-                                    style: TextStyle(
-                                      color: isExpense ? Colors.white : AppColors.primary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
+                                    context.tr(ref, 'tx_no_results'),
+                                    style: TextStyle(color: context.textSecondary, fontSize: 16),
                                   ),
                                 ],
                               ),
                             ),
-                          ).animate().fadeIn(duration: 300.ms, delay: (index * 50).ms).slideX(begin: 0.05, end: 0);
-                        },
-                      ),
+                          ],
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          itemCount: filteredTxs.length,
+                          itemBuilder: (context, index) {
+                            final tx = filteredTxs[index];
+                            final isExpense = tx.type == TransactionType.expense;
+                            final formattedDate = isFr
+                                ? DateFormat('dd MMMM yyyy à HH:mm', 'fr_FR').format(tx.date)
+                                : DateFormat('dd MMMM yyyy at HH:mm', 'en_US').format(tx.date);
+
+                            return Dismissible(
+                              key: Key(tx.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+                              ),
+                              confirmDismiss: (direction) async {
+                                final textStyle = TextStyle(color: context.textPrimary);
+                                return await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: context.surfaceColor,
+                                    title: Text(
+                                      isFr ? 'Supprimer la transaction ?' : 'Delete transaction?', 
+                                      style: textStyle
+                                    ),
+                                    content: Text(
+                                      isFr 
+                                        ? 'Voulez-vous vraiment supprimer cette transaction ? Cette action recalculera vos budgets.' 
+                                        : 'Do you really want to delete this transaction? This action will recalculate your budgets.',
+                                      style: TextStyle(color: context.textSecondary),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(ctx).pop(false),
+                                        child: Text(context.tr(ref, 'cancel'), style: TextStyle(color: context.textSecondary)),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.of(ctx).pop(true),
+                                        child: Text(context.tr(ref, 'delete'), style: const TextStyle(color: AppColors.error)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (direction) async {
+                                try {
+                                  await ref.read(transactionOperationsProvider.notifier).delete(tx.id);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(isFr ? 'Transaction supprimée !' : 'Transaction deleted!'),
+                                        backgroundColor: AppColors.success,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('${context.tr(ref, 'error')}: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: context.surfaceColor,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: context.borderColor),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: isExpense 
+                                          ? AppColors.error.withOpacity(0.12)
+                                          : AppColors.primary.withOpacity(0.12),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        isExpense ? Icons.arrow_outward_rounded : Icons.south_west_rounded,
+                                        color: isExpense ? AppColors.error : AppColors.primary,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            tx.description,
+                                            style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${_getCategoryDisplayName(tx.category, isFr)} • $formattedDate',
+                                            style: TextStyle(color: context.textSecondary, fontSize: 11),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      (isExpense ? '-' : '+') + tx.amount.toFCFA(),
+                                      style: TextStyle(
+                                        color: isExpense ? context.textPrimary : AppColors.primary,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ).animate().fadeIn(duration: 300.ms, delay: (index * 50).ms).slideX(begin: 0.05, end: 0);
+                          },
+                        ),
+                  ),
                 ),
               ],
             );
@@ -243,9 +292,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isActive ? AppColors.primary : AppColors.darkSurface,
+            color: isActive ? AppColors.primary : context.surfaceColor,
             border: Border.all(
-              color: isActive ? AppColors.primary : AppColors.darkBorder,
+              color: isActive ? AppColors.primary : context.borderColor,
             ),
             borderRadius: BorderRadius.circular(30),
           ),
@@ -253,7 +302,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             child: Text(
               label,
               style: TextStyle(
-                color: isActive ? Colors.black : AppColors.darkTextPrimary,
+                color: isActive ? Colors.black : context.textPrimary,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                 fontSize: 13,
               ),
